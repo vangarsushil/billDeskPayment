@@ -1,0 +1,3561 @@
+import { Router } from "@angular/router";
+import {
+    LoadingController,
+    NavController,
+    Platform,
+    PopoverController,
+} from "@ionic/angular";
+import { CreateTripService } from "src/app/services/create-trip.service";
+import { LoadingService } from "src/app/common/services/loading.service";
+import { Component, Input, OnDestroy, OnInit } from "@angular/core";
+import { ModalController } from "@ionic/angular";
+import { FareDetailsComponent } from "../../../../common/components/fare-details/fare-details.component";
+import { PassengerPreferencesComponent } from "./passenger-preferences/passenger-preferences.component";
+import { ToastrService } from "ngx-toastr";
+import { AlertController } from "@ionic/angular";
+import * as _ from "lodash";
+import { PassengerFormComponent } from "src/app/common/components/passenger-form/passenger-form.component";
+import * as moment from "moment";
+import { AllConfigureParamas, FlightSearchInputModel, ManagementFees } from "src/app/models/flight/flight-search-input.model";
+import { HomeService } from "src/app/services/home.service";
+import { FlightSearchService } from "src/app/services/flight-search.service";
+import { RazorpayPaymentService } from "src/app/common/services/razorpay-payment.service";
+import { Inject } from "@angular/core";
+import { CustomPopOverComponent } from "src/app/common/components/custom-pop-over/custom-pop-over.component";
+import { insuranceService } from "src/app/services/insurance.service";
+import { AuthenticationService } from "src/app/services/authentication.service";
+import { FormArray, FormBuilder, FormControl, FormGroup, Validators } from "@angular/forms";
+import {
+    FlightInsuranceInputParams,
+    FlightInsuranceSuppliersList,
+    FlightInsuraceUpsellParentSearchReq,
+    FlightInsuraceUpsellSearchResult,
+    FlightUserInsuranceModel,
+} from "src/app/models/flight/flight-insurance.model";
+import { CustomDatePickerComponent } from "src/app/common/components/custom-date-picker/custom-date-picker.component";
+import { CalendarModalOptions } from "ion2-calendar";
+import { CustomListComponent } from "src/app/common/components/custom-list/custom-list.component";
+import { customComponentProps, popOverTypes } from "src/app/models/common/custom-list.model";
+import { DatePipe } from "@angular/common";
+import { GetPaymentsModesModel, getTripDetailsModel } from "src/app/models/tripbox/tripbox-flight.model";
+import { SharedService } from "src/app/services/shared.service";
+import { GSTInfo } from "src/app/models/flight/flight-traveller-model";
+import { CommonService } from 'src/app/common/services/common-service';
+import { LoginModel } from "src/app/models/common/login.model";
+import { AirService } from "src/app/services/air-service";
+import { TripBoxInboxService } from "src/app/services/tripbox.service";
+import { PlatformService } from "src/app/services/platformbase.service";
+import { ViewMultipleOptionsModule } from "../search-results/view-multiple-options/view-multiple-options.module";
+import { takeUntil } from 'rxjs/operators';
+import { Subject } from "rxjs";
+import { environment } from "src/environments/environment";
+import { InAppBrowser, InAppBrowserOptions } from "@ionic-native/in-app-browser/ngx";
+import { BillDeskPaymentService } from "src/app/common/services/billDesk-payment.service";
+
+declare var Razorpay: any;
+
+@Component({
+    selector: "app-paymentmode",
+    templateUrl: "./payment-mode.component.html",
+    styleUrls: ["./payment-mode.component.scss"],
+})
+
+export class PaymentModeComponent implements OnInit, OnDestroy {
+    private unsubscribe = new Subject();
+    platformType: number;
+    showpaymentoptions: boolean = false;
+    // -- new change
+    expandedCardType = -1; // 1-flightDetails, 2-passengerDetails, 3-companyInfo,
+    // flight_details_expanded: boolean = false;
+    // passengers_details_expanded: boolean = false;
+    // company_infomation_expanded: boolean = false;
+    // passengers_preferences_expanded: boolean = false; //-unused declared false everyewehre, not used in html
+
+    // -- new change
+
+    fare_brakup_expanded: boolean = false;
+    frequent_flyer_details_expanded: boolean = false;
+    canShowFrequentFlyer = false;
+    chargesExpanded = false;
+    isEtsApplicable: boolean = true;
+
+
+    /*legal_Entity_Guid: string;
+    legal_Entity_Id: number;*/
+    cacheKey = "";
+    userInfo: any;
+    // flightObj: any;
+    fareCheckflightRequestKeys = [];
+    adultpassenger: any = 0;
+    childpassenger: any = 0;
+    infantpassenger: any = 0;
+    unableisTaasTMC: boolean = false;
+    createtripResponce: any;
+    loaderToShow: Promise<void>;
+    radioValue = "";
+    cardradioValue = "";
+    isChecked = false;
+    showPaymentmsg = false;
+    maxTime: number;
+    timer: any;
+    apiTimer: any;
+    displayTime: string;
+    totalAmount: any = 0;
+    differenceAmount = 0;
+    ticketPriceTotal = 0;
+    addOnTotal = {
+        mealTotal: 0,
+        baggageTotal: 0,
+        miscTotal: 0,
+        seatTotal: 0,
+        total: 0,
+    };
+
+    // eventFlag: boolean = false;
+    // modalReferenceNext: any;
+    // configTime: number;
+
+    actionPoolflightObj: any;
+    corporateTravellerData = [];
+    ignoreBookingValidation: boolean = false;
+    basePriceTotal = 0;
+    tax = 0;
+    isInternational: false;
+    fromTripbox = false;
+    approvalType: any;
+    flightSearchInputObj: FlightSearchInputModel;
+    fromOffline = false;
+    termsOfServiceURL: any;
+    paymentoptions = [];
+    selectedpaymentoption: any = "";
+    selectedcard: any = "";
+    savedCards: any = [];
+    paymentGateId: any;
+    paymentModeId: any = 2;
+    paymentResponse: any;
+    sourceType: any;
+    cardGuid: any;
+    cardId: any;
+    bookdisabled: boolean = false;
+    refundAmount: number = 0;
+    fromManageBook: boolean = false;
+    fromManageBookResche: boolean = false;
+    fromManageBookSSR: boolean = false;
+    l_Old_Tax_Fare: number = 0;
+    l_Old_Base_Fare: number = 0;
+    travelType: any;
+    showmanagefee: boolean = false;
+    showmfinancialCharges: boolean = false;
+    tradeDiscountFlag: boolean = true;
+    etsApplicable: boolean = true;
+    isConsultant: boolean = false;
+    isConsultantLogin: any;
+    ShowEts: boolean = false;
+    totalserviceCharges: number = 0;
+    cvv_card: any;
+    selected_tab: any;
+    savedcard_cvv: any;
+    meal_alert: boolean = false;
+    formbookdisabled: boolean = false;
+
+    /*configuration settins */
+    managemntCharges = new ManagementFees();
+    configParams = new AllConfigureParamas();
+    showBalance: boolean = true;
+    /*  added in allConfigparama
+    showPassenPref = false;
+      isFromManualFlow = false;
+      showInsurUpsell = false;
+      isInsuranceMandatory = false; */
+    dummyLoader = [1, 2, 3, 4];
+    insurance_details_expanded: boolean = true;
+    compLive = true;
+    isGstMandatory: boolean = false;
+    gstDetails: any;
+    avGSTList: any;
+    filterGstList: any;
+    selectedGst: any;
+    creditBalance: any;
+    balNotAvail: boolean;
+    termsServiceChecked: boolean = false;
+    productId = 1;
+    isMealAdded: boolean;
+    is_Personal_Booking: boolean;
+    Payment_Gateway_Type: any;
+    actionpoolflightFareObjs: any;
+    selectedFlightFare: any;
+    selectedPaxCountADT: any;
+    selectedPaxCountCHD: any;
+    selectedPaxCountINF: any;
+    netBankingCodeResponse: any;
+    walletResponse: any;
+    setTime: any;
+    newcardobj = {
+        "addressLine1": "",
+        "addressLine2": "",
+        "bankId": "",
+        "bankName": "",
+        "cardIssuingBrand": "",
+        "cardNumber": "",
+        "cardTypeId": "",
+        "cityName": "",
+        "cityId": "",
+        "country": "",
+        "countryId": "",
+        "expiryMonth": "",
+        "expiryYear": "",
+        "isSavedCards": "",
+        "nameOnCard": "",
+        "postalCode": "",
+        "stateName": "",
+        "stateId": "",
+        "sourceType": "",
+        "cardType": "",
+    };
+    default_meal = {
+        "addOnSsr": "",
+        "description": "",
+        "fare": "",
+        "flightIndex": "",
+        "isDefaultMealSelected": "",
+        "isLCC": "",
+        "segmentIndex": "",
+        "ssrCode": "",
+        "ssrIndex": "",
+        "tripIndex": "",
+        "tripIndicator": ""
+    };
+
+    upiId: any;
+    paymentDisableBookBtn: boolean;
+    paymentModeIdv2: any;
+    ShowAddons: any = false;
+    account_Balance: boolean = true;
+    accept_Terms_Conditions_check_box_Flight: boolean = true;
+    tassDisplayOption: any;
+    form: FormGroup;
+    usergstdetails: any;
+    userselectedseats = '';
+    userselectedmeal = '';
+    /*configuration settins */
+
+    constructor(
+        private platformService: PlatformService,
+        private router: NavController,
+        public routerbyurl: Router,
+        public loadingCtrl: LoadingController,
+        private actionPoolAPI: CreateTripService,
+        private bookAPI: CreateTripService,
+        private modalController: ModalController,
+        private loadingService: LoadingService,
+        private toaster: ToastrService,
+        private angularRouter: Router,
+        private getConfigure: HomeService,
+        private flightService: FlightSearchService,
+        private alertController: AlertController,
+        @Inject(RazorpayPaymentService) private razorPay: RazorpayPaymentService,
+        private billDeskPaymentService: BillDeskPaymentService,
+        private insurService: insuranceService,
+        private popoverController: PopoverController,
+        private authenticationService: AuthenticationService,
+        public formBuilder: FormBuilder,
+        public datepipe: DatePipe,
+        private sharedservice: SharedService,
+        private fareCheckAPI: CreateTripService,
+        private commonService: CommonService,
+        private tripboxService: TripBoxInboxService,
+        private theInAppBrowser: InAppBrowser,
+        private platform: Platform
+    ) {
+
+        this.configParams.amdId = '';
+    }
+
+    ngOnInit() {
+        this.usergstdetails = JSON.parse(sessionStorage.getItem('usergstdetails'));
+        this.userInfo = JSON.parse(sessionStorage.getItem('userInfo'));
+
+        this.tassDisplayOption = JSON.parse(sessionStorage.getItem("taasConfig"));
+
+        if (this.userInfo.isTaasTMC) {
+            this.tassDisplayOption?.forEach(item => {
+                if (item['configCode'] == "Account_Balance") {
+                    this.account_Balance = item['configValue'] == 1 ? true : false;
+                }
+                if (item['configCode'] == "Accept_Terms_&_Conditions_check_box" && item['productId'] == 1) {
+                    this.accept_Terms_Conditions_check_box_Flight = item['configValue'] == 1 ? true : false;
+                }
+            });
+        } else {
+            this.account_Balance = true;
+            this.accept_Terms_Conditions_check_box_Flight = true
+        }
+
+        this.commonService.setAddons(this.ShowAddons);
+        // console.log(this.commonService.setAddons)
+        this.commonService.getAddons().subscribe(result => {
+            // console.log(result)
+            this.ShowAddons = result
+            this.displayname()
+
+        });
+
+        this.is_Personal_Booking = JSON.parse(sessionStorage.getItem("is_Personal_Booking"));
+        this.loadingService.hide();
+        this.platformType = this.platformService.getPlatformType();
+        this.isConsultantLogin = JSON.parse(sessionStorage.getItem('isConsultant'));
+        const navigationExtras = this.angularRouter.getCurrentNavigation().extras
+            .state;
+        if (navigationExtras) {
+            if (navigationExtras.fromTripbox) {
+                this.fromTripbox = true;
+            } else if (navigationExtras.fromManageBook) {
+                this.fromManageBook = true;
+                let amendment: any = JSON.parse(sessionStorage.getItem("amendment"));
+
+                this.l_Old_Tax_Fare = amendment.flightRequests.l_Old_Tax_Fare;
+                this.l_Old_Base_Fare = amendment.flightRequests.l_Old_Base_Fare;
+                this.refundAmount =
+                    amendment.flightRequests.l_Old_Base_Fare +
+                    amendment.flightRequests.l_Old_Tax_Fare;
+                this.fromTripbox = true;
+            } else if (navigationExtras.fromManageBookSSR) {
+                this.fromManageBook = true;
+                this.fromManageBookSSR = true;
+                this.fromTripbox = true;
+
+            } else if (navigationExtras.fromManageBookResche) {
+                this.fromManageBook = true;
+                this.fromManageBookResche = true;
+                let amendment: any = JSON.parse(sessionStorage.getItem("amendment"));
+
+                this.l_Old_Tax_Fare = amendment.flightRequests.l_Old_Tax_Fare;
+                this.l_Old_Base_Fare = amendment.flightRequests.l_Old_Base_Fare;
+                this.refundAmount =
+                    amendment.flightRequests.l_Old_Base_Fare +
+                    amendment.flightRequests.l_Old_Tax_Fare;
+                this.fromTripbox = true;
+            }
+        } else {
+        }
+
+        this.flightService.getStepperTitle2().subscribe((result) => {
+            if (this.showpaymentoptions) {
+                this.showpaymentoptions = false;
+            }
+        }, (error) => {
+            this.loadingService.hide();
+            this.toaster.error("API Error", 'Error');
+        });
+
+        this.termsOfServiceURL = JSON.parse(
+            sessionStorage.getItem("userInfo")
+        ).termsOfServiceURL;
+
+        this.flightSearchInputObj = JSON.parse(
+            sessionStorage.getItem("flightSearchInput")
+        );
+        this.fromOffline = this.flightSearchInputObj.fromOffline;
+        this.createtripResponce = this.fromTripbox
+            ? JSON.parse(sessionStorage.getItem("tripData"))
+            : JSON.parse(sessionStorage.getItem("createtripResponce"));
+
+        // if (this.createtripResponce.allowSSRBooking) {
+        //     this.ShowAddons = true
+        //     this.commonService.setAddons(this.ShowAddons);
+
+        // } else {
+        //     this.ShowAddons = false
+        //     this.commonService.setAddons(this.ShowAddons);
+
+        // }
+
+        this.getBalance();
+        this.savedCards.length = 0;
+        this.paymentoptions.length = 0;
+        this.radioValue = "";
+        this.getPaymentModes();
+        this.bookdisabled = true;
+
+
+        // if (this.fromOffline == false) {
+        //     this.cacheKey = this.fromTripbox ? this.createtripResponce.cacheKey : JSON.parse(sessionStorage.getItem('searchFlightKeys')).cacheKey;
+        //     this.maxTime = this.createtripResponce.timer;
+        //     this.isInternational = this.fromTripbox ? false : JSON.parse(sessionStorage.getItem('searchFlightKeys')).isInternational;
+
+        // }
+        if (this.fromManageBookResche) {
+            this.createtripResponce.isReschedule = true;
+            this.createtripResponce.flightRequestGuId = String(this.createtripResponce?.flightRequestDetails?.flightRequestGuid);
+            this.createtripResponce.flightRequestId = String(this.createtripResponce?.flightRequestDetails?.flightRequestId);
+
+
+        } else {
+            this.createtripResponce.isReschedule = null;
+        }
+
+        /* configure code start */
+        if (navigationExtras) {
+            if (navigationExtras.fromTripbox) this.configParams.iSfromTripBox = true; // tripbox awaiting for booking
+            else if (navigationExtras.fromManageBookResche) this.configParams.isFromReschedule = true; // post booking reschedule online
+            else if (navigationExtras.fromManageBookSSR) this.configParams.isFromSSROnline = true; //this.loadingFee=false; // post booking ssr online
+            /*  else if (this.route.url.match(/pnr-retriaval-confirm-booking/g)) this.isFrompnrRetriaval=true; // pnr-retriaval
+                else if (this.route.url.match(/manualticket-final-booking/g)) this.isFromManualFlow=true; // manaul booking
+                else if (this.route.url.match(/confirmbooking/g)) this.iSFromEmail = true; // email
+                else if (this.route.url.match(/bot-bookingconfirm/g)) this.isfromTripboxBot=true; // bot-email
+                else if (this.route.url.match(/tripbox-review-final-booking/g)) this.isfromTripboxReview=true; // tripbox-submitted request-inprogress
+                else if (this.route.url.match(/trip-view/g)) this.isfromCart = true; // tripview */
+            else this.configParams.isFromDirectFlightSearch = true; // -direct search
+        } else {
+            this.configParams.isFromDirectFlightSearch = true;
+        }
+
+        this.configParams.isFromManualFlow = this.createtripResponce["isManualTicket"];
+        if (!(this.configParams.iSFromEmail || this.configParams.isfromTripboxBot)) this.isConsultant = this.sharedservice.isConsultant();
+        if (this.isConsultant) this.setManagementFeeFlags();
+
+        if (this.configParams.isFromDirectFlightSearch || this.configParams.isFromManualFlow || this.configParams.isFrompnrRetriaval || this.configParams.isfromTripboxBot || this.configParams.isfromCart || this.configParams.isfromTripboxReview) {
+            this.getConfigurAPICall();
+        }
+        else { //isfromtripbox, isfromemail, isfromreschedule, isfromssronline (gettripdetails)
+            if (this.createtripResponce['flightRequestDetails']['status'] == 4 || this.configParams.amdId) {
+                if (!this.configParams.amdId) {
+                    this.configParams.isFromManualFlow = this.createtripResponce['isManualTicket'];// manual flow-awaiting for booking -from tripbox
+                    this.configParams.isFrompnrRetriaval = this.createtripResponce['isPnrRetrieval']; // pnr retriaval flow-awaiting for booking -from tripbox
+                    if (this.configParams.isFromManualFlow || this.configParams.isfromTripboxBot) this.configParams.iSfromTripBox = false;
+                }
+                this.getConfigurAPICall();
+            }
+        }
+        // if (!this.configParams.isFromManualFlow) {
+        //     this.ShowAddons = true
+        //     this.commonService.setAddons(this.ShowAddons);
+
+        // } else {
+        //     this.ShowAddons = false
+        //     this.commonService.setAddons(this.ShowAddons);
+
+        // }
+
+        // if (this.createtripResponce.allowSSRBooking && !this.configParams.isFromManualFlow) {
+        //     this.ShowAddons = true
+        //     this.commonService.setAddons(this.ShowAddons);
+
+        // } else {
+        //     this.ShowAddons = false
+        //     this.commonService.setAddons(this.ShowAddons);
+
+        // }
+        /*configure code end */
+
+        this.cacheKey = this.fromOffline
+            ? ""
+            : this.fromTripbox
+                ? this.createtripResponce.cacheKey
+                : JSON.parse(sessionStorage.getItem("searchFlightKeys")).cacheKey;
+        this.maxTime = this.fromOffline ? "" : this.createtripResponce.timer;
+        // this.isInternational = this.fromOffline
+        //     ? ""
+        //     : this.fromTripbox
+        //         ? false
+        //         : JSON.parse(sessionStorage.getItem("searchFlightKeys")).isInternational;
+        this.isInternational = JSON.parse(sessionStorage.getItem("isInternational"))
+        // this.configTime = this.createtripResponce['timer'];
+
+        this.corporateTravellerData = this.createtripResponce.passengers;
+
+        for (var passenger of this.createtripResponce.passengers) {
+            if (passenger.paxType == "ADT") {
+                this.adultpassenger++
+            }
+            if (passenger.paxType == "CHD") {
+                this.childpassenger++
+            }
+            if (passenger.paxType == "INF") {
+                this.infantpassenger++
+            }
+        }
+        this.fareCheckflightRequestKeys.length = 0;
+        if (this.fromManageBookResche) {
+
+            let flights: any = ([] = JSON.parse(
+                sessionStorage.getItem("selectedFareOptionObjs")
+            ));
+            for (var obj of flights) {
+                const str1 = obj.key;
+                const str2 = obj.selectedFairOption
+                    ? obj.selectedFairOption.fareKey
+                    : obj.fareOption[0].fareKey;
+                for (var fareOption of obj.fareOption) {
+                    // console.log(fareOption.evaReferences.adultAdvancedAmount);
+                    var ObjStr1 = {
+                        advancePricing: {
+                            adult: fareOption.evaReferences.adultAdvancedAmount,
+                            child: fareOption.evaReferences.childAdvancedAmount ? fareOption.evaReferences.childAdvancedAmount : "",
+                            infant: ""
+                        },
+                        flightKey: str1,
+                        fareOptionKey: str2,
+                    };
+
+                }
+
+                this.fareCheckflightRequestKeys.push(ObjStr1);
+                if (this.createtripResponce.flightRequestKeys && this.createtripResponce.flightRequestKeys.length <= 0) {
+                    this.createtripResponce.flightRequestKeys = this.fareCheckflightRequestKeys;
+                }
+            }
+        } else {
+
+            for (var obj of this.createtripResponce.flights) {
+                const str1 = obj.key;
+                const str2 = obj.selectedFairOption
+                    ? obj.selectedFairOption.fareKey
+                    : obj.fareOption[0].fareKey;
+                for (var fareOption of obj.fareOption) {
+                    // console.log(fareOption.evaReferences.adultAdvancedAmount);
+                    var ObjStr1 = {
+                        advancePricing: {
+                            adult: fareOption.evaReferences.adultAdvancedAmount,
+                            child: fareOption.evaReferences.childAdvancedAmount ? fareOption.evaReferences.childAdvancedAmount : "",
+                            infant: ""
+                        },
+                        flightKey: str1,
+                        fareOptionKey: str2,
+                    };
+                }
+                this.fareCheckflightRequestKeys.push(ObjStr1);
+                if (this.createtripResponce.flightRequestKeys && this.createtripResponce.flightRequestKeys.length <= 0) {
+                    this.createtripResponce.flightRequestKeys = this.fareCheckflightRequestKeys;
+                }
+            }
+        }
+
+        this.approvalType = JSON.parse(sessionStorage.getItem("passType"));
+
+        if (this.approvalType) {
+            this.ShowAddons = false
+            this.commonService.setAddons(this.ShowAddons);
+            this.actionPoolflightObj = this.createtripResponce.flights;
+        } else {
+            if (this.fromManageBookSSR) {
+                // this.ssractionPoolCall();
+                this.actionPoolflightObj = this.createtripResponce.flights;
+
+                this.setSSRActionpool(this.actionPoolflightObj);
+            } else {
+                this.fareCheckCall();
+                this.startTimer();
+            }
+        }
+        this.isGstMandatory = this.createtripResponce['isGstMandatory'];
+        if (!this.createtripResponce['gstdetails']) { //if gst object  is null or undefined
+            this.gstDetails = new GSTInfo(this.createtripResponce['gstdetails']);
+        } else { //if gst object is present
+            this.gstDetails = new GSTInfo(this.createtripResponce['gstdetails']);
+        }
+
+        this.avGSTList = this.createtripResponce['availableGst'];
+        this.filterGstList = _.cloneDeep(this.avGSTList);
+        this.selectedGst = this.gstDetails;
+        this.travelType = JSON.parse(sessionStorage.getItem("TravelType"));
+        /*this.createtripResponce.passengers[0].frequentFlyer = [{
+            airlineName:'Indigo',
+            membershipNumber:'123'
+        }]*/
+        this.createtripResponce.passengers.forEach((passenger) => {
+            if (passenger.frequentFlyer?.length) {
+                this.canShowFrequentFlyer = true;
+            }
+        });
+
+        this.allInsurInfo.APIsInitialised = false;
+        this.setInsurInitialInfo();
+        this.flightService.isInsurBackBtnEnabled().subscribe((res) => {
+            if (res) {
+                this.clickInsrBackStep();
+            }
+        }, (error) => {
+            this.loadingService.hide();
+            this.toaster.error("API Error", 'Error');
+        });
+
+        this.getPaymentDataFromPaymentMode();
+
+        if (this.platformType == 1) {
+            this.form = new FormGroup({
+                formatedStartDate: new FormControl(new Date(this.allInsurInfo.formatedStartDate)),
+                formatedEndDate: new FormControl(null)
+            });
+        }
+    }
+
+    getPaymentDataFromPaymentMode() {
+        this.commonService.getPaymentData().pipe(takeUntil(this.unsubscribe)).subscribe(data => {
+            if (data && data['type']) {
+                switch (data['type']) {
+                    case 'upi':
+                        if (data['valid']) {
+                            this.bookdisabled = false;
+                            this.upiId = data['data']['upiId']
+                            this.paymentModeId = data['data']['paymentModeId']
+                            this.paymentGateId = data['data']['net_bankingresponse']['Payment_Gateway_Id'],
+                                this.sourceType = data['data']['net_bankingresponse']['sourceType'],
+                                this.actionPoolCall(true, true)
+                        }
+                        else {
+                            this.bookdisabled = true;
+                        }
+                        break;
+
+                    case 'netBanking':
+                        if (data['valid']) {
+                            this.bookdisabled = false;
+                            this.paymentModeId = data['data']['paymentModeId']
+                            this.paymentGateId = data['data']['net_bankingresponse']['Payment_Gateway_Id'],
+                                this.sourceType = data['data']['net_bankingresponse']['sourceType'],
+                                this.netBankingCodeResponse = data['data']['netBankingCodeResponse'],
+                                this.actionPoolCall(true, true)
+                        }
+                        else {
+                            this.bookdisabled = true;
+                        }
+                        break;
+
+                    case 'wallet':
+                        if (data['valid']) {
+                            this.bookdisabled = false;
+                            this.paymentModeId = data['data']['paymentModeId']
+                            this.paymentGateId = data['data']['net_bankingresponse']['Payment_Gateway_Id'],
+                                this.sourceType = data['data']['net_bankingresponse']['sourceType'],
+                                this.walletResponse = data['data']['walletResponse'],
+                                this.actionPoolCall(true, true)
+                        }
+                        else {
+                            this.bookdisabled = true;
+                        }
+                        break;
+
+                    // case 'reset':
+                    //     this.paymentDisableBookBtn = true;
+                    //     break;
+                }
+            }
+        })
+    }
+
+    naviagateTo() {
+        if (this.accept_Terms_Conditions_check_box_Flight == false) {
+            this.termsServiceChecked = true;
+        }
+
+        if (this.termsServiceChecked) {
+            for (let pax of this.createtripResponce.passengers) {
+                // console.log(pax);
+                if (pax?.seat) {
+
+                    for (let seat of pax?.seat) {
+                        if (seat?.fare?.ticketPrice == 0) {
+                            // console.log('in seat----setting zero');
+                            seat.fare = 0
+                        }
+                    }
+                }
+
+                if (pax?.meal) {
+
+                    for (let meal of pax?.meal) {
+                        if (meal?.fare?.ticketPrice == 0) {
+                            // console.log('in meal----setting zero');
+                            meal.fare = 0
+
+                        }
+                    }
+                }
+
+
+                if (pax?.baggage) {
+
+                    for (let bag of pax?.baggage) {
+                        if (bag?.fare?.ticketPrice == 0) {
+                            // console.log('in bag----setting zero');
+                            bag.fare = 0
+                        }
+                    }
+                }
+
+                if (pax?.misc) {
+
+                    for (let misc of pax?.misc) {
+                        if (misc?.fare?.ticketPrice == 0) {
+                            // console.log('in misc----setting zero');
+                            misc.fare = 0
+                        }
+                    }
+                }
+                // console.log('closed -- reset for ssr')
+                // console.log(pax);
+            }
+            if (this.selected_tab == 'new_card' && this.paymentModeId == 2) {
+
+
+                for (let pax of this.createtripResponce.passengers) {
+                    if (pax?.meal == null && this.meal_alert == false) {
+
+                        this.defaultmeal_alert()
+                    }
+                    else if (pax?.meal != null) {
+                        // this.flightCreateOrder();
+                        this.meal_alert = true;
+
+                    }
+                }
+
+            }
+            if (this.selected_tab == 'new_card' && this.paymentModeId == 7) {
+
+
+                this.meal_alert = true;
+
+
+            }
+            if (this.selected_tab != 'new_card' && this.paymentModeId == 2) {
+
+
+                this.meal_alert = true;
+
+            }
+            // if (this.showpaymentoptions) {
+            this.bookdisabled = true;
+            if (
+                (this.selectedpaymentoption?.isCardAvailable) &&
+                this.selectedcard?.paymentGatewayType != ""
+            ) {
+                // this.toaster.error("Please select another payment option", "Error");
+                this.flightCreateOrder();
+            } else if (this.paymentModeId == 7) {
+                this.flightCreateOrder();
+
+            } else if (this.paymentModeId == 5 || this.paymentModeId == 6 || this.paymentModeId == 8) {
+
+                this.meal_alert = true;
+                this.flightCreateOrder();
+            } else {
+                if (this.fromManageBook) {
+                    if (this.fromManageBookSSR) {
+                        this.flightBookCall();
+                    } else {
+                        this.rescheduleflightBookCall();
+                    }
+                } else {
+                    this.flightBookCall();
+                }
+            }
+            // } else {
+            //     // this.totalAmount = this.totalAmount + this.managemntCharges.insuranceAmount;
+            //     this.savedCards.length = 0;
+            //     this.paymentoptions.length = 0;
+            //     this.radioValue = "";
+            //     this.getPaymentModes();
+
+            //     this.showpaymentoptions = true;
+            //     this.bookdisabled = true;
+            //     this.flightService.setStepperTitle(true);
+            // }
+        } else {
+            this.toaster.error("Please accept Terms of service ")
+        }
+
+    }
+
+    // handleEvent(event, timeoutPopup) {
+    //   if (event['status'] == 3) { this.eventFlag = true; }
+    //   if (event.left == 0) {
+    //     // this.modalReferenceNext = this.modalService.open(timeoutPopup, this.modalOptions);
+    //     // this.modalReferenceNext.result.then((result) => {
+    //     //   this.closeResult = `Closed with: ${result}`;
+    //     // }, (reason) => {
+    //     //   this.closeResult = `Dismissed ${this.getDismissReason(reason)}`;
+    //     // });
+    //   }
+    // }
+
+    async passengerForm(SelectedPsgFullObject) {
+        const searchItemModal = await this.modalController.create({
+            component: PassengerFormComponent,
+            componentProps: { SelectedPsgFullObject, whereStr: false },
+            keyboardClose: false,
+        });
+        searchItemModal.onDidDismiss().then((callback) => {
+            if (callback && callback.data) {
+            }
+        });
+        return await searchItemModal.present();
+    }
+
+    async actionPoolCall(radioChange?: boolean, isPaymt?) {
+        //this.loadingService.show();
+        this.formObj();
+
+        if (isPaymt) {
+            for (let pax of this.createtripResponce.passengers) {
+                // console.log(pax);
+                if (pax?.seat) {
+
+                    for (let seat of pax?.seat) {
+                        if (seat?.fare?.ticketPrice == 0) {
+                            // console.log('in seat----setting zero');
+                            seat.fare = 0
+                        }
+                    }
+                }
+
+                if (pax?.meal) {
+
+                    for (let meal of pax?.meal) {
+                        if (meal?.fare?.ticketPrice == 0) {
+                            // console.log('in meal----setting zero');
+                            meal.fare = 0
+                        }
+                    }
+                }
+
+                if (pax?.baggage) {
+
+                    for (let bag of pax?.baggage) {
+                        if (bag?.fare?.ticketPrice == 0) {
+                            // console.log('in bag----setting zero');
+                            bag.fare = 0
+                        }
+                    }
+                }
+
+                if (pax?.misc) {
+
+                    for (let misc of pax?.misc) {
+                        if (misc?.fare?.ticketPrice == 0) {
+                            // console.log('in misc----setting zero');
+                            misc.fare = 0
+                        }
+                    }
+                }
+                // console.log('closed -- reset for ssr')
+                // console.log(pax);
+            }
+            /*
+            if(pax?.seat && pax?.seat.length>0 && pax?.seat[0]?.fare) {
+                console.log('in seat----');
+                if(pax?.seat[0]?.fare?.basePrice == 0) {
+                    console.log('in seat----setting zero');
+                    pax.seat[0].fare = 0
+                }
+            }
+            if(pax?.meal && pax?.meal.length>0 && pax?.meal[0]?.fare) {
+                console.log('in meal----');
+                if(pax?.meal[0]?.fare?.basePrice == 0) {
+                    console.log('in meal----setting zero');
+                    pax.meal[0].fare = 0
+                }
+            } */
+        }
+
+        var inputParams = {
+            flightPoolKeys: this.fareCheckflightRequestKeys,
+            legalEntityGuid: this.createtripResponce.legalEntityGuid,
+            legalEntityId: this.createtripResponce.legalEntityId,
+            gst: this.createtripResponce.gstdetails.stateName ? this.createtripResponce.gstdetails : null,
+            cacheKey: this.cacheKey,
+            isPnrRetrieval: this.createtripResponce.isPnrRetrieval,
+            actionType: "FAREQUOTE",
+            insuranceUpsellPassengerPage: true,
+            flightRequestId: String(this.createtripResponce.flightRequestId),
+            amendmentId: this.createtripResponce.amendmentId,
+            amendmentGuid: this.createtripResponce?.amendmentGuid,
+            passengers: this.createtripResponce.passengers,
+            paymentGateId: this.paymentGateId,
+            paymentModeId: this.paymentModeId,
+            cardGuid: this.cardGuid,
+            cardId: this.cardId,
+            isEtsApplicable: this.etsApplicable,
+            isManualTicket: null,
+            sourceType: this.sourceType,
+        };
+
+        let hasInsurance = this.checkIfInsuranceAdded();
+        if (hasInsurance == true) {
+            inputParams["passengers"] = this.insurActionPoolParams.passengers;
+            inputParams["insuranceDetails"] = this.insurActionPoolParams.insurInfo;
+        }
+        if (this.newcardobj.bankName) {
+
+            inputParams["bankId"] = this.newcardobj.bankId;
+            inputParams["bankName"] = this.newcardobj.bankName,
+                inputParams["cardIssuingBrand"] = this.newcardobj.cardIssuingBrand;
+            inputParams["cardTypeId"] = this.newcardobj.cardTypeId;
+            inputParams["commercialType"] = this.isConsultant ? null : 1;
+            inputParams["commercialTypeReason"] = "";
+
+        }
+
+
+        this.actionPoolAPI
+            .fareCheckActionPoolServiceCall(inputParams)
+            .subscribe(async (res) => {
+                if (res.isError === true) {
+                    await this.loadingService.hide();
+                    if (res.errorCode == 13) {
+                        this.apiTimer = setTimeout(() => {
+                            this.actionPoolCall();
+                        }, 2000);
+                        // } else if (res.errorCode == 5) {
+                        //     this.toaster.error(res.errorMessage, "Error");
+                        //     //     this.modalController.dismiss();
+
+                    } else {
+                        this.toaster.error(res.errorMessage, "Error");
+                        // this.etsApplicable = false;
+                    }
+
+                    // this.toaster.error(res.errorMessage,'Error');
+                } else if (!res.isError) {
+
+                    await this.loadingService.hide();
+
+                    if (!this.ShowAddons) {
+                        if ((this.selectedcard?.paymentGatewayType &&
+                            this.selectedcard?.paymentGatewayType != "")
+                            || (this.paymentModeId == 5 && (this.paymentGateId == undefined || this.paymentGateId == null))
+                            || this.paymentModeId == 2
+                            || this.paymentModeId == 7
+                        ) {
+                            this.bookdisabled = true;
+                        } else {
+                            this.bookdisabled = false;
+                        }
+                    }
+
+                    this.actionPoolflightObj = res.payload;
+                    this.flightService.setflightActionpool(this.actionPoolflightObj);
+                    this.flightService.getflightActionpool().subscribe(result => {
+
+                        if (result) {
+                            this.actionpoolflightFareObjs = result;
+                            // console.log(this.actionpoolflightFareObjs)
+                            this.actionpoolflightFareObjs.forEach(flight => {
+
+                                flight['travelIndex1'] = _.filter(flight.segments, { 'tripIndex': 1 })
+                                flight['travelIndex2'] = _.filter(flight.segments, { 'tripIndex': 2 })
+                                flight['travelIndex3'] = _.filter(flight.segments, { 'tripIndex': 3 })
+
+                            });
+                        }
+
+                        let sum = 0;
+                        this.actionpoolflightFareObjs.forEach((data: any) => {
+                            sum += data.fareOption?.fare?.ticketPrice;
+                            this.selectedFlightFare = sum
+
+
+                            data.fareOption.forEach((fareoption) => {
+                                if (fareoption.fareDescription == "Published") {
+                                    fareoption.fareDescription = "Retail"
+                                }
+                                //cheange Corporate to Xray Fare
+                                // if (fareoption.fareDescription == 'Corporate') {
+                                //     fareoption.fareDescription = 'Xray Fare'
+                                // }
+
+                                fareoption.paxFares.forEach((element) => {
+                                    if (element.paxType == "ADT") {
+                                        this.selectedPaxCountADT = element.paxCount + " Adult"
+                                    }
+                                    if (element.paxType == "CHD") {
+                                        this.selectedPaxCountCHD = " + " + element.paxCount + " Child"
+                                    }
+                                    if (element.paxType == "INF") {
+                                        this.selectedPaxCountINF = " + " + element.paxCount + " Infant"
+                                    }
+                                });
+                            });
+
+
+
+                        });
+
+                    });
+                    if (!radioChange) {
+                        this.maxTime = this.createtripResponce.timer;
+
+                    }
+
+                    this.totalAmount = 0;
+                    this.differenceAmount = 0;
+                    this.basePriceTotal = 0;
+                    this.tax = 0;
+                    this.ticketPriceTotal = 0;
+                    if (this.userInfo.isConsultant || this.userInfo.roleId == 2) {
+                        this.tradeDiscountFlag = true;
+                        this.showmanagefee = true;
+                    } else {
+                        if (this.createtripResponce.tradeDiscountFlag) {
+                            this.tradeDiscountFlag = true;
+                        } else {
+                            this.tradeDiscountFlag = true;
+                        }
+                        if (this.createtripResponce.managementFeeFlag) {
+                            this.showmanagefee = true;
+                        } else {
+                            this.showmanagefee = true;
+                        }
+                    }
+
+                    this.actionPoolflightObj.forEach((flightData) => {
+                        let tradeDiscount: number = 0;
+                        this.tradeDiscountFlag
+                            ? (tradeDiscount = flightData.managementFee.tradeDiscount)
+                            : 0;
+
+                        this.basePriceTotal =
+                            this.basePriceTotal + flightData.fareOption[0].fare.basePrice;
+                        this.tax = this.tax + flightData.fareOption[0].fare.tax;
+                        this.ticketPriceTotal =
+                            this.ticketPriceTotal + flightData.fareOption[0].fare.ticketPrice;
+                        this.totalAmount =
+                            this.totalAmount + flightData.fareOption[0].fare.ticketPrice;
+                    });
+                    this.DisplayETS(this.actionPoolflightObj[0]);
+                    this.setmMangementFee(this.actionPoolflightObj[0]);
+
+                    this.totalAmount = this.totalAmount + this.totalserviceCharges + this.managemntCharges.insuranceAmount;
+                    this.differenceAmount =
+                        this.ticketPriceTotal -
+                        JSON.parse(sessionStorage.getItem("passengerDetailsTotalAmount"));
+                }
+            }, (error) => {
+                this.loadingService.hide();
+                this.actionPoolCall();
+                this.toaster.error("API Error", 'Error');
+            });
+    }
+
+    async ssractionPoolCall(radioChange?: boolean) {
+        // this.loadingService.show();
+        this.formObj();
+        var inputParams = {
+            actionType: "SSRFAREQUOTE",
+            amendmentId: this.createtripResponce.amendmentId,
+            amendmentGuid: this.createtripResponce.amendmentGuid,
+            cacheKey: this.cacheKey,
+            cardId: this.cardId,
+            cardGuid: this.cardGuid,
+            cardTypeId: null,
+            flightPoolKeys: this.fareCheckflightRequestKeys,
+            flightRequestId: String(this.createtripResponce.flightRequestId),
+            flightRequestGuid: String(this.createtripResponce.flightRequestGuId),
+            gst: this.createtripResponce.gstdetails,
+            ignoreBookingValidation: true,
+            isConsultant: this.isConsultant,
+            isEtsApplicable: null,
+            isManualTicket: null,
+            isPnrRetrieval: this.createtripResponce.isPnrRetrieval,
+            passengers: this.createtripResponce.passengers,
+            legalEntityGuid: this.createtripResponce.legalEntityGuid,
+            legalEntityId: this.createtripResponce.legalEntityId,
+            paymentGateId: this.paymentGateId,
+            paymentModeId: this.paymentModeId,
+            sourceType: this.sourceType,
+        };
+
+        let hasInsurance = this.checkIfInsuranceAdded();
+        if (hasInsurance == true) {
+            inputParams["passengers"] = this.insurActionPoolParams.passengers;
+            inputParams["insuranceDetails"] = this.insurActionPoolParams.insurInfo;
+        }
+
+        this.actionPoolAPI
+            .flightssractionpoolServiceCall(inputParams)
+            .subscribe((res) => {
+                if (res.isError === true) {
+                    if (res.errorCode == 13) {
+                        this.apiTimer = setTimeout(() => {
+                            this.ssractionPoolCall();
+                        }, 2000);
+                    } else {
+                        this.loadingService.hide();
+                    }
+
+                    // this.toaster.error(res.errorMessage,'Error');
+                } else if (!res.isError) {
+                    this.loadingService.hide();
+                    this.actionPoolflightObj = null;
+                    let payloadobj = [];
+                    payloadobj.push(res.payload);
+
+                    if (this.showpaymentoptions) {
+                        if (
+                            this.selectedcard?.paymentGatewayType &&
+                            this.selectedcard?.paymentGatewayType != ""
+                        ) {
+                            this.bookdisabled = true;
+                        } else {
+                            this.bookdisabled = false;
+                        }
+                    }
+
+                    this.actionPoolflightObj = payloadobj;
+
+                    this.setSSRActionpool(this.actionPoolflightObj, radioChange);
+                }
+            }, (error) => {
+                this.loadingService.hide();
+                this.toaster.error("API Error", 'Error');
+            });
+    }
+
+    setSSRActionpool(res, radioChange?: boolean) {
+
+        if (!radioChange) {
+            this.startTimer();
+        }
+        this.totalAmount = 0;
+        this.differenceAmount = 0;
+        this.basePriceTotal = 0;
+        this.tax = 0;
+        this.ticketPriceTotal = 0;
+        if (this.userInfo.isConsultant || this.userInfo.roleId == 2) {
+            this.tradeDiscountFlag = true;
+            this.showmanagefee = true;
+        } else {
+            if (this.createtripResponce.tradeDiscountFlag) {
+                this.tradeDiscountFlag = true;
+            } else {
+                this.tradeDiscountFlag = true;
+            }
+            if (this.createtripResponce.managementFeeFlag) {
+                this.showmanagefee = true;
+            } else {
+                this.showmanagefee = true;
+            }
+        }
+        this.DisplayETS(this.actionPoolflightObj[0]);
+        this.setmMangementFee(this.actionPoolflightObj);
+        this.totalAmount = this.totalAmount + this.totalserviceCharges + this.managemntCharges.insuranceAmount;
+    }
+
+    setmMangementFee(flightData: any) {
+        this.totalserviceCharges = 0;
+        let tradeDiscount: number = 0;
+        let totalServiceCharge: number = 0;
+        let roundOffAmount: number = 0;
+        let financialCharges: number = 0;
+        this.managemntCharges.insuranceAmount = 0;
+
+        if (flightData.managementFee != null) {
+            this.managemntCharges.insuranceAmount = flightData?.managementFee?.insuranceAmount;
+            this.tradeDiscountFlag
+                ? (tradeDiscount = flightData.managementFee.tradeDiscount)
+                : 0;
+
+            if (this.userInfo.isConsultant || this.userInfo.roleId == 2) {
+                if (flightData.etsApplicable) {
+                    this.etsApplicable = true;
+                } else {
+                    this.etsApplicable = false;
+                }
+            } else {
+                this.etsApplicable = false;
+            }
+
+            if (this.showmanagefee) {
+                totalServiceCharge = this.etsApplicable
+                    ? flightData.managementFee.etsTotalServiceCharge
+                    : flightData.managementFee.totalServiceCharge;
+                roundOffAmount = this.etsApplicable
+                    ? flightData.managementFee.etsRoundOffAmount
+                    : flightData.managementFee.roundOffAmount;
+            }
+
+            if (this.showmanagefee && flightData.managementFee.financialCharges > 0) {
+                this.showmfinancialCharges = true;
+            } else {
+                this.showmfinancialCharges = false;
+            }
+            financialCharges = this.showmfinancialCharges
+                ? flightData.managementFee.financialCharges
+                : 0;
+            this.totalserviceCharges =
+                roundOffAmount + totalServiceCharge + tradeDiscount;
+        } else {
+        }
+    }
+
+    DisplayETS(flightData: any) {
+        if (flightData.managementFee != null) {
+            if (this.userInfo.isConsultant || this.userInfo.roleId == 2) {
+                if (flightData.etsApplicable) {
+                    if (flightData.managementFee.etsServiceCharge > 0) {
+                        this.ShowEts = true;
+                    } else {
+                        this.ShowEts = false;
+                    }
+                } else {
+                    this.ShowEts = false;
+                }
+            } else {
+                this.ShowEts = false;
+            }
+        } else {
+            this.ShowEts = false;
+        }
+    }
+
+    fare_brakup_onclick() {
+        if (this.fare_brakup_expanded) {
+            this.fare_brakup_expanded = false;
+        } else {
+            this.fare_brakup_expanded = true;
+        }
+    }
+
+    startTimer() {
+        this.timer = setTimeout((x) => {
+            if (this.maxTime <= 0) {
+            }
+            this.maxTime -= 1;
+            var hr = ~~(this.maxTime / 3600);
+            var min = ~~((this.maxTime % 3600) / 60);
+            var sec = this.maxTime % 60;
+            var sec_min = "";
+            if (hr > 0) {
+                sec_min += "" + hr + "h" + (min < 10 ? "0" : "");
+            }
+            // sec_min += "" + min + " m" + (sec < 10 ? "0" : "");
+            // sec_min += " " + sec + " s";
+            sec_min += "" + (min < 10 ? "0" : "") + min + ":";
+            sec_min += "" + (sec < 10 ? "0" : "") + sec;
+            this.displayTime = sec_min;
+
+            if (this.maxTime > 0) {
+                // this.hidevalue = false;
+                this.startTimer();
+            } else {
+                this.displayTime = null;
+                if (this.compLive) {
+                    this.presentAlert();
+                }
+
+                // this.hidevalue = true;
+            }
+        }, 1000);
+    }
+
+    async presentAlert() {
+        const alert = await this.alertController.create({
+            mode: "md",
+            cssClass: "time-alert",
+            message: `<ion-text>  You have exceeded the time limit for completing the booking. We may need to reconfirm availability of the flights you have selected and the fare(s) may change.</ion-text>`,
+            buttons: [
+                {
+                    text: "Reconfirm Availability",
+                    cssClass: "",
+                    handler: () => {
+                        // this.hotelFareCheck();
+                        this.actionPoolflightObj = null;
+                        this.fareCheckCall();
+                    },
+                },
+                {
+                    text: "Back to Home",
+                    cssClass: "",
+                    handler: () => {
+                        this.router.navigateRoot(["/home"]);
+                    },
+                },
+            ],
+        });
+
+        await alert.present();
+    }
+
+    async fareCheckCall() {
+        this.fareCheckAPI
+            .fareCheckServiceCall({
+                flightPoolKeys: this.fareCheckflightRequestKeys,
+                legalEntityGuid: this.createtripResponce.legalEntityGuid,
+                legalEntityId: this.createtripResponce.legalEntityId,
+                gst: this.fromTripbox ? null : this.createtripResponce.gstdetails,
+                cacheKey: this.cacheKey,
+                isEtsApplicable: true,
+                isPnrRetrieval: this.createtripResponce.isPnrRetrieval,
+                passengers: this.createtripResponce.passengers,
+            })
+            .subscribe((res) => {
+                if (res.isError === true) {
+                    this.loadingService.hide();
+                } else if (!res.isError) {
+                    this.actionPoolCall();
+                    this.loadingService.hide();
+                }
+            }, (error) => {
+                this.loadingService.hide();
+                this.toaster.error("API Error", 'Error');
+            });
+    }
+
+    async openFareDetails() {
+
+        if (!this.actionPoolflightObj[0].managementFee?.insuranceAmount && this.managemntCharges.insuranceAmount != 0) {
+            this.actionPoolflightObj[0].managementFee.insuranceAmount = this.managemntCharges.insuranceAmount;
+        }
+        const fareDetailsModal = await this.modalController.create({
+            component: FareDetailsComponent,
+
+            componentProps: {
+                actionPoolflightObj: this.actionPoolflightObj,
+                addOnTotal: this.addOnTotal,
+                createtripResponce: this.createtripResponce,
+                whereStr: false,
+            },
+            keyboardClose: false,
+        });
+        fareDetailsModal.onDidDismiss().then((callback) => {
+            if (callback && callback.data) {
+            }
+        });
+        return await fareDetailsModal.present();
+    }
+
+    hideUnhideDetailsCard(cardType: any) {
+        if (cardType == this.expandedCardType) {//already expanded
+            this.expandedCardType = -1;
+        } else {
+            this.expandedCardType = cardType;
+        }
+    }
+
+    /* new change -- look below code also
+    passengers_details_onclick() {
+        if (this.expandedCardType == 2) {//already expanded
+            this.expandedCardType = -1;
+        } else {
+            this.expandedCardType = 2;
+        }
+    }
+
+    company_infomation_onclick() {
+        if (this.company_infomation_expanded) {
+            this.company_infomation_expanded = false;
+        } else {
+            this.passengers_details_expanded = false;
+            this.company_infomation_expanded = true;
+            this.flight_details_expanded = false;
+        }
+    }
+
+    flight_details_onclick() {
+        if (this.flight_details_expanded) {
+            this.flight_details_expanded = false;
+        } else {
+            this.passengers_details_expanded = false;
+            this.company_infomation_expanded = false;
+            this.flight_details_expanded = true;
+        }
+    }
+      passengers_preferences_onclick() {
+        this.passengers_details_expanded = false;
+        this.company_infomation_expanded = false;
+        this.flight_details_expanded = false;
+        this.openPassengerPreferences();
+    }
+    */
+
+    passengers_preferences_onclick() {
+        this.expandedCardType = -1;
+        // this.openPassengerPreferences();
+        this.ShowAddons = !this.ShowAddons
+        this.flightService.setStepperTitle(false);
+    }
+
+    async openPassengerPreferences() {
+        const passengerPreferences = await this.modalController.create({
+            component: PassengerPreferencesComponent,
+            componentProps: {
+                actionPoolflightObj: this.actionPoolflightObj,
+                maxTime: this.maxTime,
+                totalAmount: this.totalAmount,
+                addOnTotal: this.addOnTotal,
+                showpaymentoptions: this.showpaymentoptions,
+                differenceAmount: this.differenceAmount,
+                createTripResponse: this.createtripResponce,
+            },
+            keyboardClose: false,
+            cssClass: 'fullScreen-component'
+        });
+        passengerPreferences.onDidDismiss().then((callback) => {
+            if (callback && callback.data) {
+                this.createtripResponce = _.cloneDeep(
+                    JSON.parse(sessionStorage.getItem("createtripResponce"))
+                );
+                this.addOnTotal = callback.data;
+            }
+        });
+        return await passengerPreferences.present();
+    }
+    // Booking
+
+
+    formObj() {
+        for (let passenger of this.createtripResponce.passengers) {
+            for (let seat of (passenger && passenger.seat) || []) {
+                if (seat.fare?.ticketPrice) {
+                    seat.fare = seat.fare.ticketPrice;
+                }
+                /*seat.userIndex = '';
+                seat.tripIndicator = '';*/
+            }
+            for (let meal of (passenger && passenger.meal) || []) {
+                if (meal.fare?.ticketPrice) {
+                    meal.fare = meal.fare.ticketPrice;
+                }
+                /*meal.flightIndex = '';
+                meal.tripIndicator = '';*/
+            }
+            for (let baggage of (passenger && passenger.baggage) || []) {
+                if (baggage.fare?.ticketPrice) {
+                    baggage.fare = baggage.fare.ticketPrice;
+                }
+                /*baggage.flightIndex = '';
+                baggage.tripIndicator = '';*/
+            }
+            for (let misc of (passenger && passenger.misc) || []) {
+                if (misc.fare?.ticketPrice) {
+                    misc.fare = misc.fare.ticketPrice;
+                }
+                /*misc.flightIndex = '';
+                misc.tripIndicator = '';*/
+            }
+        }
+    }
+    enough_fund() {
+        let is_enough_fund = true;
+        let FinalTicketAmount = (this.totalAmount - this.refundAmount + this.addOnTotal.total);
+
+        if (this.paymentModeId == 1) {
+            if (this.creditBalance >= FinalTicketAmount) {
+                is_enough_fund = true;
+
+            } else {
+                is_enough_fund = false;
+
+            }
+
+        }
+        return is_enough_fund;
+    }
+    async flightBookCall() {
+        console.log("flight Book Called");
+
+        if (this.enough_fund()) {
+            this.bookdisabled = true;
+            this.loadingService.show();
+            this.formObj();
+            var inputParams = {
+                flightPoolKeys: this.fareCheckflightRequestKeys,
+                legalEntityGuid: this.createtripResponce.legalEntityGuid,
+                legalEntityId: this.createtripResponce.legalEntityId,
+                gst: this.createtripResponce.gstdetails,
+                cacheKey: this.cacheKey,
+
+                //flightRequestIds: (this.createtripResponce.flightRequestId),
+                //flightRequestGuid: String(this.createtripResponce.flightRequestGuId),
+
+                flightRequestId: String(this.createtripResponce.flightRequestId),
+                flightRequestGuid: String(this.createtripResponce.flightRequestGuId),
+
+                isPnrRetrieval: this.createtripResponce.isPnrRetrieval,
+                isConsultant: true,
+                isManualTicket: this.createtripResponce.isManualTicket,
+                amendmentId: this.createtripResponce.amendmentId,
+                amendmentGuid: this.createtripResponce?.amendmentGuid,
+                isEtsApplicable: this.actionPoolflightObj[0].etsApplicable,
+                ignoreBookingValidation: this.ignoreBookingValidation,
+                passengers: this.createtripResponce.passengers,
+                paymentGateId: this.paymentGateId,
+                paymentModeId: this.paymentModeId,
+                paymentResponse: this.paymentResponse ? this.paymentResponse : null,
+                cardGuid: this.cardGuid,
+                cardId: this.cardId,
+                sourceType: this.sourceType,
+            };
+
+            let hasInsurance = this.checkIfInsuranceAdded();
+            if (hasInsurance == true) {
+                inputParams["passengers"] = this.insurActionPoolParams.passengers;
+                inputParams["insuranceDetails"] = this.insurActionPoolParams.insurInfo;
+            }
+
+            this.bookAPI.flightBookServiceCall(inputParams).subscribe((res) => {
+                if (res.isError === true) {
+                    this.loadingService.hide();
+
+                    if (res.errorCode == 8) {
+                        this.loadingService.hide();
+                        this.showBookAgain(res.errorMessage);
+                    } else {
+                        this.loadingService.hide();
+                        this.toaster.error(res.errorMessage, "Error");
+                    }
+                } else if (!res.isError) {
+                    // this.loadingService.hide();
+                    this.compLive = false;
+
+                    this.billingentityactionPoolCall()
+
+                    // if (this.fromManageBookSSR) {
+                    //     this.routerbyurl.navigateByUrl("flights/stepper/bookingsuccess", {
+                    //         state: { fromManageBookSSR: this.fromManageBookSSR },
+                    //     });
+                    // } else {
+                    //     this.routerbyurl.navigateByUrl("flights/stepper/bookingsuccess", {
+                    //         state: { fromManageBook: this.fromManageBook },
+                    //     });
+                    // }
+                }
+            }, (error) => {
+                this.loadingService.hide();
+                this.toaster.error("API Error", 'Error');
+            });
+        } else {
+            let apiErrorMessage = 'Not enough fund is available for the booking, Please check with the account department.'
+            this.toaster.error(apiErrorMessage);
+        }
+    }
+    async flightCreateOrder() {
+
+        //this.loadingService.show();
+        this.formObj();
+        /*for (let passenger of this.createtripResponce.passengers) {
+          for (let seat of (passenger && passenger.seat) || []) {
+            seat.fare = seat.fare.basePrice;
+            /!*seat.userIndex = '';
+            seat.tripIndicator = '';*!/
+          }
+          for (let meal of (passenger && passenger.meal) || []) {
+            meal.fare = meal.fare.basePrice;
+            /!*meal.flightIndex = '';
+            meal.tripIndicator = '';*!/
+          }
+          for (let baggage of (passenger && passenger.baggage) || []) {
+            baggage.fare = baggage.fare.basePrice;
+            /!*baggage.flightIndex = '';
+            baggage.tripIndicator = '';*!/
+          }
+          for (let misc of (passenger && passenger.misc) || []) {
+            misc.fare = misc.fare.basePrice;
+            /!*misc.flightIndex = '';
+            misc.tripIndicator = '';*!/
+          }
+        }*/
+        this.advTaxWithFlightPoolKeys(this.fareCheckflightRequestKeys);
+        if (this.savedCards > 0) {
+            this.paymentGateId = this.savedCards[0]?.paymentGatewayId;
+            this.sourceType = this.savedCards[0]?.sourceType;
+        }
+
+
+        // console.log(this.createtripResponce.gstdetails);
+        // console.log(this.createtripResponce.passengers);
+        var inputParams = {
+            flightPoolKeys: this.fareCheckflightRequestKeys,
+            legalEntityGuid: this.createtripResponce.legalEntityGuid,
+            legalEntityId: this.createtripResponce.legalEntityId,
+            gst: this.createtripResponce.gstdetails,
+            cacheKey: this.cacheKey,
+            flightRequestId: this.fromTripbox
+                ? sessionStorage.getItem("fligthRequestId")
+                : String(this.createtripResponce.flightRequestId),
+            flightRequestGuid: this.fromTripbox
+                ? sessionStorage.getItem("fligthRequestGuid")
+                : String(this.createtripResponce.flightRequestGuId),
+            //   creditCard: this.newcardobj,
+            isPnrRetrieval: this.createtripResponce.isPnrRetrieval,
+            isConsultant: true,
+            isManualTicket: this.createtripResponce.isManualTicket,
+            amendmentId: this.createtripResponce?.amendmentId,
+            amendmentGuid: this.createtripResponce?.amendmentGuid,
+            isEtsApplicable: this.actionPoolflightObj[0].etsApplicable,
+            ignoreBookingValidation: this.ignoreBookingValidation,
+            passengers: this.createtripResponce.passengers,
+            paymentGateId: this.paymentGateId,
+            sourceType: this.sourceType,
+            paymentModeId: this.paymentModeId,
+            cardGuid: this.cardGuid,
+            //  cardId: this.cardId,
+
+            bankCode: this.paymentModeId == 5 ? this.upiId['value'] :
+                this.paymentModeId == 6 ? this.netBankingCodeResponse['bank_Code'] :
+                    this.paymentModeId == 8 ? this.walletResponse['bank_Code'] : '',
+
+            paymentType: this.paymentModeId == 6 ? 'PWB' : this.paymentModeId == 5 ? 'PWU' : this.paymentModeId == 8 ? "PWW" : "PWC",
+
+            // bankId: this.newcardobj.bankId,
+            // cardIssuingBrand: this.newcardobj.cardIssuingBrand,
+            // cardTypeId: this.newcardobj.cardTypeId,
+            commercialType: null,
+            commercialTypeReason: "",
+            insuranceDetails: null,
+            isPassthroughForManualTicket: null,
+            cvv: (this.paymentModeId == 6 || this.paymentModeId == 5 || this.paymentModeId == 8) ? "" : this.commonService.encryptData((this.cvv_card)?.toString()),
+
+        }
+
+        let newcard = this.selected_tab;
+        if (newcard == 'new_card' && this.paymentModeId != 6) {
+            inputParams["creditCard"] = this.newcardobj;
+            inputParams["bankId"] = this.newcardobj.bankId;
+            inputParams["cardIssuingBrand"] = this.newcardobj.cardIssuingBrand;
+            inputParams["cardTypeId"] = this.newcardobj.cardTypeId;
+            inputParams["sourceType"] = this.sourceType;
+        }
+
+        if (newcard != 'new_card') {
+            inputParams["cardId"] = this.cardId;
+            inputParams["sourceType"] = this.sourceType;
+
+
+        }
+        inputParams["isMobileRequest"] = true;
+        if (this.meal_alert == true) {
+            this.loadingService.show();
+            this.bookAPI.flightCreateOrderCall(inputParams)
+                .subscribe((res) => {
+                    if (res.isError === true) {
+                        this.loadingService.hide();
+
+                        if (res.errorCode == 8) {
+                            this.loadingService.hide();
+                            this.showBookAgain(res.errorMessage);
+                        } else if (res.errorCode == 19) {
+                            this.loadingService.hide();
+                            if (this.fromManageBook) {
+                                if (this.fromManageBookSSR) {
+                                    this.flightBookCall();
+                                } else {
+                                    this.rescheduleflightBookCall();
+                                }
+                            } else {
+                                this.flightBookCall();
+                            }
+                        } else {
+                            this.loadingService.hide();
+                            this.toaster.error(res.errorMessage, "Error");
+                        }
+                    } else if (!res.isError) {
+                        this.loadingService.hide();
+
+                        if (res.payload.callBookActionPool) {
+                            this.routerbyurl.navigateByUrl("flights/stepper/bookingsuccess", {
+                                state: { fromManageBook: this.fromManageBook },
+                            });
+                        }
+                        else {
+                            if (this.paymentGateId == 8) {
+                                // sessionStorage.setItem("flightCreateOrderResponse", JSON.stringify(res.payload));
+
+                                // this.razorPay.openBillDesk(res.payload).then((resolve)=>{
+                                //     // callbackMethod(resolve);
+                                //     console.log("resolved:", resolve);
+
+                                //   },
+                                //   (reject)=>{
+                                //     if(reject !="Modal Closed")
+                                //     console.log("reject:", reject);
+                                //     // callbackMethod(this.razorPay.convertToResponse(reject,'failed'))
+                                //     // else callbackMethod('Modal Closed');
+                                //   });
+
+                                var queryString = "appKey=" + res.payload.appKey +
+                                    "&paymentRefNumber=" + res.payload.paymentRefNumber +
+                                    "&referenceKey=" + res.payload.referenceKey +
+                                    "&logo=" + res.payload.logo;
+
+                                // Create the full URL by combining the base URL and the query string
+                                var baseURL = "https://fastcollab.github.io/xray/Billdesk.html";
+                                var fullURL = baseURL + "?" + queryString;
+
+                                console.log(fullURL);
+
+                                let options: InAppBrowserOptions = {
+                                    location: 'yes',
+                                    allowFileAccessFromFileURLs: 'yes',
+                                    allowUniversalAccessFromFileURLs: 'yes',
+                                    width: window.innerWidth,   // Set the width to the full screen width
+                                    height: window.innerHeight, // Set the height to the full screen height
+                                }
+                                
+                                let ref = this.theInAppBrowser.create(fullURL, '_blank', options);
+
+                                //  let ref = this.theInAppBrowser.create('../../../../../assets/raw/billDeskPaymentLoad.html', '_blank', options);
+                                console.log("In app browser open", fullURL);
+
+                                console.log("ref1 : ", ref);
+                                console.log("options : ",options);
+
+                                // Listen for the "loadstart" event
+
+                                ref.on('loadstart').subscribe(function (event) {
+                                    console.log("loadstart", event.url);
+                                    if (event.url.indexOf('flight-redirect') >= 0) {
+                                        sessionStorage.setItem("billDesk", "true");
+                                        console.log("1")
+                                        ref.close();
+                                    }
+                                });
+
+                                let timer = setInterval(() => {
+                                    console.log(sessionStorage.getItem('billDesk'));
+                                    if (sessionStorage.getItem("billDesk") == "true") {
+                                        clearInterval(timer)
+                                        this.billingentityactionPoolCall();
+                                    }
+                                }, 1000);
+
+
+                                //  this.billDeskPaymentService.openBillDesk(res.payload).then((resolve) => {
+                                //      console.log("resolve", resolve);
+
+                                //      // this.paymentResponse = {
+                                //      //     orderId: (resolve['error'] && resolve['error']['metadata'] && resolve['error']['metadata']['order_id']) ? resolve['error']['metadata']['order_id'] : '',
+                                //      //     paymentId: (resolve['error'] && resolve['error']['metadata'] && resolve['error']['metadata']['payment_id']) ? resolve['error']['metadata']['payment_id'] : '',
+                                //      //     signature: '',
+                                //      //     orderStatus: 'FAILED',
+                                //      //     txMsg: "",
+                                //      //     txTime: "",
+                                //      //     paymentMode: "",
+                                //      // }
+
+                                //      // if (this.fromManageBook) {
+                                //      //     if (this.fromManageBookSSR) {
+                                //      //         this.flightBookCall();
+                                //      //     } else {
+                                //      //         this.rescheduleflightBookCall();
+                                //      //     }
+                                //      // } else {
+                                //      //     this.flightBookCall();
+                                //      // }
+
+                                //  },
+                                //      (reject) => {
+                                //          console.log(reject);
+                                //          //    if(reject !="Modal Closed") callbackMethod(this.razorPay.convertToResponse(reject,'failed'))
+                                //          //    else callbackMethod('Modal Closed');
+                                //      }
+                                //  );
+                            } else {
+                                if ((this.platformType == 1 || this.platformType == 3) && !environment.paymentGateClientside) {
+
+                                    console.log(res)
+                                    if (res['payload']['isRedirection'] && res['payload']['redirectionURL']) {
+                                        if (res['payload']['postData']) {
+                                            var form = document.createElement("form");
+                                            form.method = "POST";
+                                            form.action = res['payload']['redirectionURL'];
+                                            form.style.display = 'none';
+                                            var data1 = document.createElement("input");
+                                            data1.name = 'encRequest';
+                                            data1.value = res['payload']['postData']['encRequest'];
+                                            var data2 = document.createElement("input");
+                                            data2.name = 'access_code';
+                                            data2.value = res['payload']['postData']['access_code'];
+                                            form.appendChild(data1);
+                                            form.appendChild(data2);
+                                            document.body.appendChild(form);
+                                            form.submit();
+                                        } else {
+                                            window.location.href = res['payload']['redirectionURL'];
+                                        }
+                                    } else {
+                                        this.razorPay.openRazorPay(res.payload).then((res) => {
+                                            this.paymentResponse = {
+                                                paymentMode: "",
+                                                paymentReferenceId: res["razorpay_payment_id"],
+                                                paymentSignature: res["razorpay_signature"],
+                                                txMsg: "",
+                                                txStatus: "SUCCESS",
+                                                txTime: "",
+                                            };
+
+                                            if (this.fromManageBook) {
+                                                if (this.fromManageBookSSR) {
+                                                    this.flightBookCall();
+                                                } else {
+                                                    this.rescheduleflightBookCall();
+                                                }
+                                            } else {
+                                                this.flightBookCall();
+                                            }
+                                        });
+                                    }
+
+
+
+                                } else {
+                                    this.razorPay.payWithRazor(res.payload).then((res) => {
+                                        this.paymentResponse = {
+                                            paymentMode: "",
+                                            paymentReferenceId: res["razorpay_payment_id"],
+                                            paymentSignature: res["razorpay_signature"],
+                                            txMsg: "",
+                                            txStatus: "SUCCESS",
+                                            txTime: "",
+                                        };
+
+                                        if (this.fromManageBook) {
+                                            if (this.fromManageBookSSR) {
+                                                this.flightBookCall();
+                                            } else {
+                                                this.rescheduleflightBookCall();
+                                            }
+                                        } else {
+                                            this.flightBookCall();
+                                        }
+                                    });
+
+                                }
+
+                            }
+                        }
+
+                    }
+                }, (error) => {
+                    this.loadingService.hide();
+                    this.toaster.error("API Error", 'Error');
+                });
+        }
+        this.meal_alert = false;
+    }
+
+    async razorpayalert(msg: any) {
+        const alert = await this.alertController.create({
+            cssClass: "my-custom-class",
+            header: "Alert",
+            subHeader: "Subtitle",
+            message: msg.razorpay_order_id,
+            buttons: ["OK"],
+        });
+
+        await alert.present();
+    }
+
+    async razorpayalertbf(msg: any) {
+        const alert = await this.alertController.create({
+            cssClass: "",
+            // header: 'Confirm!',
+            message: msg.razorpay_order_id,
+            backdropDismiss: true,
+            buttons: [
+                {
+                    text: "Cancel",
+                    role: "cancel",
+                    cssClass: "secondary",
+                    handler: (blah) => {
+                        this.alertController.dismiss();
+                    },
+                },
+                {
+                    text: "Continue",
+                    handler: () => {
+                        this.alertController.dismiss();
+                    },
+                },
+            ],
+        });
+        await alert.present();
+    }
+
+    async rescheduleflightBookCall() {
+        this.loadingService.show();
+        this.formObj();
+        /*for (let passenger of this.createtripResponce.passengers) {
+          for (let seat of (passenger && passenger.seat) || []) {
+            seat.fare = seat.fare.basePrice;
+            /!*seat.userIndex = '';
+            seat.tripIndicator = '';*!/
+          }
+          for (let meal of (passenger && passenger.meal) || []) {
+            meal.fare = meal.fare.basePrice;
+            /!*meal.flightIndex = '';
+            meal.tripIndicator = '';*!/
+          }
+          for (let baggage of (passenger && passenger.baggage) || []) {
+            baggage.fare = baggage.fare.basePrice;
+            /!*baggage.flightIndex = '';
+            baggage.tripIndicator = '';*!/
+          }
+          for (let misc of (passenger && passenger.misc) || []) {
+            misc.fare = misc.fare.basePrice;
+            /!*misc.flightIndex = '';
+            misc.tripIndicator = '';*!/
+          }
+        }*/
+        this.fareCheckflightRequestKeys.length = 0;
+
+        let flights: any = ([] = JSON.parse(
+            sessionStorage.getItem("selectedFareOptionObjs")
+        ));
+        for (var obj of flights) {
+            const str1 = obj.key;
+            const str2 = obj.selectedFairOption
+                ? obj.selectedFairOption.fareKey
+                : obj.fareOption[0].fareKey;
+            var ObjStr1 = {
+                flightKey: str1,
+                fareOptionKey: str2,
+            };
+            this.fareCheckflightRequestKeys.push(ObjStr1);
+        }
+        this.bookAPI
+            .rescheduleflightBookServiceCall({
+                flightPoolKeys: this.fareCheckflightRequestKeys,
+                legalEntityGuid: this.createtripResponce.legalEntityGuid,
+                legalEntityId: this.createtripResponce.legalEntityId,
+                gst: this.createtripResponce.gstdetails,
+                cacheKey: this.createtripResponce.cacheKey,
+                //flightRequestIds: (this.createtripResponce.flightRequestId),
+                //flightRequestGuid: String(this.createtripResponce.flightRequestGuId),
+
+                flightRequestId: String(this.createtripResponce.flightRequestId),
+                flightRequestGuid: String(this.createtripResponce.flightRequestGuId),
+
+                isPnrRetrieval: this.createtripResponce.isPnrRetrieval,
+                isConsultant: this.isConsultant,
+                isManualTicket: this.createtripResponce.isManualTicket,
+                amendmentId: this.createtripResponce.amendmentId,
+                amendmentGuid: this.createtripResponce.amendmentGuid,
+                isEtsApplicable: this.actionPoolflightObj[0].etsApplicable,
+                ignoreBookingValidation: this.ignoreBookingValidation,
+                passengers: this.createtripResponce.passengers,
+                paymentGateId: this.paymentGateId,
+                paymentModeId: this.paymentModeId,
+                paymentResponse: this.paymentResponse ? this.paymentResponse : null,
+                cardGuid: this.cardGuid,
+                cardId: this.cardId,
+                sourceType: this.sourceType,
+            })
+            .subscribe((res) => {
+                if (res.isError === true) {
+                    this.loadingService.hide();
+
+                    if (res.errorCode == 8) {
+                        this.loadingService.hide();
+                        this.showBookAgain(res.errorMessage);
+                    } else {
+                        this.loadingService.hide();
+                        this.toaster.error(res.errorMessage, "Error");
+                    }
+                } else if (!res.isError) {
+                    this.loadingService.hide();
+                    this.compLive = false;
+                    this.routerbyurl.navigateByUrl("flights/stepper/bookingsuccess", {
+                        state: { fromManageBook: this.fromManageBook },
+                    });
+                }
+            }, (error) => {
+                this.loadingService.hide();
+                this.toaster.error("API Error", 'Error');
+            });
+    }
+
+    async showBookAgain(error) {
+        this.bookdisabled = false;
+        const alert = await this.alertController.create({
+            cssClass: "",
+            // header: 'Confirm!',
+            message: error,
+            backdropDismiss: true,
+            buttons: [
+                {
+                    text: "Cancel",
+                    role: "cancel",
+                    cssClass: "secondary",
+                    handler: (blah) => {
+                        this.alertController.dismiss();
+                    },
+                },
+                {
+                    text: "Continue",
+                    handler: () => {
+                        this.ignoreBookingValidation = true;
+
+                        if (
+                            this.selectedpaymentoption?.isCardAvailable
+                            // &&
+                            // this.selectedcard?.paymentGatewayType != ""
+                        ) {
+                            this.meal_alert = true;
+                            this.flightCreateOrder();
+                        } else {
+                            if (this.fromManageBook) {
+                                if (this.fromManageBookSSR) {
+                                    this.flightBookCall();
+                                } else {
+                                    this.rescheduleflightBookCall();
+                                }
+                            } else {
+                                this.flightBookCall();
+                            }
+                        }
+                    },
+                },
+            ],
+        });
+        await alert.present();
+    }
+
+    goToBookAnother() {
+        this.compLive = false;
+        this.router.navigateRoot(["home"]);
+    }
+
+    goToTripbox() {
+        sessionStorage.setItem("isAgentView", JSON.stringify(2));
+        this.compLive = false;
+        // this.router.navigateRoot(["tripbox/tripbox-landing"]);
+        this.tripboxService.setTabSelection('tripbox')
+        this.router.navigateRoot(['tripbox']);
+    }
+
+    async getConfigurAPICall() {
+        const userData = JSON.parse(sessionStorage.getItem("userInfo"));
+        this.userInfo = userData; //need to remove once refreshtoken done
+        if (userData) {
+            this.getConfigure
+                .getConfigureCall({
+                    legalEntityGuid: this.userInfo.legalEntityGuId,
+                    legalEntityId: this.userInfo.legalEntityId,
+                    action: "BOOKING",
+                    productId: 1,
+                })
+                .subscribe((res) => {
+
+                    if (!res["isError"] && res["errorCode"] == 0 && res.payload) {
+                        const configurations = res.payload;
+                        const termsAndCondition = _.find(configurations, { 'configCode': 'Terms_And_Conditions' });
+                        this.configParams.termsAndConditionUrl = _.find(configurations, { 'configCode': 'Terms_Conditions_URL' });
+                        this.termsOfServiceURL = this.configParams.termsAndConditionUrl.configValue;
+                        const allowInsurance = _.find(configurations, { 'configCode': 'Enable_Insurance_Upsell' });
+                        const isInsuranceMandatory = _.find(configurations, { 'configCode': 'Insurance_Upsell_Mandatory' });
+                        const Insurance_Upsell_Passenger_Page = _.find(configurations, { 'configCode': 'Insurance_Upsell_Passenger_Page' });
+                        const allowSSRBooking = _.find(configurations, { 'configCode': 'Allow_SSR_Bookings' });
+                        const managementFee = _.find(configurations, { 'configCode': 'Display_Management_Fee' });
+                        const tradeDiscount = _.find(configurations, { 'configCode': 'Display_Trade_Discount' });
+                        const showAccountBalance = _.find(configurations, { 'configCode': 'Show_Account_Balance' });
+                        this.showBalance = showAccountBalance && showAccountBalance.configValue == 1 ? true : false
+                        this.termsServiceChecked = termsAndCondition && termsAndCondition.configValue == 1 ? true : false
+
+                        // console.log(this.termsServiceChecked)
+
+                        if (!this.isConsultant) {
+                            this.configParams.isEtsApplicable = false;
+                            if (allowSSRBooking && allowSSRBooking.configValue == 1) {
+                                this.configParams.allowSSRBooking = true;
+                            } else {
+                                this.configParams.allowSSRBooking = false;
+                            }
+                            if (managementFee && managementFee.configValue == 1) {
+                                this.configParams.isManagementFees = true;
+                            } else {
+                                this.configParams.isManagementFees = false;
+                            }
+                            if (tradeDiscount && tradeDiscount.configValue == 1) {
+                                this.configParams.isTradeDiscount = true;
+                            } else {
+                                this.configParams.isTradeDiscount = false;
+                            }
+                        }
+                        if (termsAndCondition && termsAndCondition.configValue == 1) {
+                            this.configParams.termsServiceChecked = true;
+                            this.configParams.isBookBtn = false;
+                        } else {
+                            this.configParams.termsServiceChecked = false;
+                            this.configParams.isBookBtn = true;
+                        }
+                        if (allowInsurance && allowInsurance.configValue == 1) {
+                            if (Insurance_Upsell_Passenger_Page && Insurance_Upsell_Passenger_Page.configValue == 2) {
+                                this.configParams.allowInsurance = true;
+                            } else {
+                                this.configParams.allowInsurance = false;
+                            }
+                            /* this.configParams.insuranceSelectionDone=false;   */
+                        } else {
+                            this.configParams.allowInsurance = false;
+                            /* this.configParams.insuranceSelectionDone=true;*/
+                        }
+                        if (this.configParams.allowInsurance && isInsuranceMandatory && isInsuranceMandatory.configValue == 1 && !this.configParams.amdId && !this.configParams.isFromManualFlow) {
+                            this.configParams.isInsuranceMandatory = true;
+                            /* this.configParams.insurancevalue="YES"*/
+                            this.allInsurInfo.ticketInsurd = "true"
+                            this.userAddedInsurance();
+                        }
+                    } else {
+                        this.configParams.termsServiceChecked = false;
+                        this.configParams.isBookBtn = true;
+                        /*this.configParams.insuranceSelectionDone=true;*/
+                        this.configParams.allowInsurance = false;
+                    }
+                }, (error) => {
+                    this.loadingService.hide();
+                    this.toaster.error("API Error", 'Error');
+                });
+        }
+    }
+
+    openWebpage() {
+        window.open(this.termsOfServiceURL, "_system", "location=yes");
+    }
+
+    async getPaymentModes() {
+        const userData = JSON.parse(sessionStorage.getItem("userInfo"));
+        this.userInfo = userData; //need to remove once refreshtoken done
+        let getPaymentModesModel = new GetPaymentsModesModel();
+        getPaymentModesModel.productId = 1;
+        getPaymentModesModel.referenceId = this.fromTripbox
+            ? sessionStorage.getItem("fligthRequestId")
+            : String(this.createtripResponce.flightRequestDetails.flightRequestId);
+        getPaymentModesModel.referenceIdGuid = this.fromTripbox
+            ? sessionStorage.getItem("fligthRequestGuid")
+            : String(this.createtripResponce.flightRequestDetails.flightRequestGuid);
+        if (userData) {
+            this.actionPoolAPI
+                .getPaymentModesServiceCall(getPaymentModesModel)
+                .subscribe((res) => {
+
+                    if (res.isError === true) {
+                    } else if (!res.isError) {
+                        this.paymentoptions = res.payload;
+
+                        for (let [i, paymentoption] of res.payload.entries()) {
+                            paymentoption.ischecked = false;
+                        }
+                    }
+                }, (error) => {
+                    this.toaster.error("API Error", 'Error');
+                });
+        }
+    }
+
+    radioGroupChange(event) {
+        this.selectedcard = "";
+        this.savedCards.length = 0;
+
+        for (let [i, paymentoption] of this.paymentoptions.entries()) {
+
+            if (paymentoption?.paymentModeName == event.detail.value) {
+                paymentoption.ischecked = true;
+                this.radioValue = event.detail.value;
+                this.selectedpaymentoption = paymentoption;
+                this.paymentModeId = this.selectedpaymentoption?.paymentModeId;
+                this.cardId = null;
+                this.cardGuid = null;
+                this.sourceType = null;
+                this.paymentGateId = null;
+
+                if (paymentoption?.isCardAvailable) {
+                    this.showPaymentmsg = true;
+                    this.getsavedcards(paymentoption?.paymentModeId);
+                    this.bookdisabled = true;
+                }
+
+                else {
+                    if (this.fromManageBookSSR) {
+                        this.ssractionPoolCall(true);
+                    } else {
+                        this.loadingService.show()
+                        this.actionPoolCall(true);
+                    }
+                    this.showPaymentmsg = false;
+                }
+            } else {
+                paymentoption.ischecked = false;
+            }
+        }
+    }
+
+    cvvchange(event, card) {
+        if (event.detail.value.length > 3) {
+            event.detail.value = event.detail.value.slice(0, 3);
+        }
+
+        for (let [i, savedCard] of this.savedCards.entries()) {
+            if (savedCard?.creditCardId == card?.creditCardId) {
+                savedCard.CVV = event.detail.value;
+                if (event.detail.value.length == 3) {
+                    this.bookdisabled = false;
+                } else {
+                    this.bookdisabled = true;
+                }
+            } else {
+                savedCard.CVV = null;
+            }
+        }
+    }
+
+    cardradioGroupChange(event) {
+        if (event.srcElement.localName == "ion-input") {
+            return;
+        }
+        for (let [i, savedCard] of this.savedCards.entries()) {
+            if (savedCard?.creditCardId == event.detail.value) {
+                savedCard.ischecked = true;
+                savedCard.CVV = "";
+                this.selectedcard = savedCard;
+                this.cardradioValue = event.detail.value;
+                this.cardId = savedCard?.creditCardId;
+                this.cardGuid = savedCard?.creditCardIdGuid;
+                this.paymentGateId = savedCard?.paymentGatewayId;
+                this.sourceType = savedCard?.sourceType;
+
+                if (
+                    savedCard?.paymentGatewayType &&
+                    savedCard?.paymentGatewayType != ""
+                ) {
+                    this.bookdisabled = true;
+                } else {
+                    this.bookdisabled = false;
+                }
+
+                if (this.fromManageBookSSR) {
+                    this.ssractionPoolCall();
+                } else {
+                    this.actionPoolCall();
+                }
+            } else {
+                savedCard.ischecked = false;
+            }
+        }
+    }
+
+    getsavedcards(paymentModeId: any) {
+        this.loadingService.show();
+        this.savedCards.length = 0;
+        const userData = JSON.parse(sessionStorage.getItem("userInfo"));
+        this.userInfo = userData; //need to remove once refreshtoken done
+        let getPaymentModesModel = new GetPaymentsModesModel();
+        getPaymentModesModel.productId = 1;
+        getPaymentModesModel.referenceId = this.fromTripbox
+            ? sessionStorage.getItem("fligthRequestId")
+            : String(this.createtripResponce.flightRequestDetails.flightRequestId);
+        getPaymentModesModel.referenceIdGuid = this.fromTripbox
+            ? sessionStorage.getItem("fligthRequestGuid")
+            : String(this.createtripResponce.flightRequestDetails.flightRequestGuid);
+        getPaymentModesModel.paymentModeId = paymentModeId;
+        if (userData) {
+            this.actionPoolAPI
+                .getsavedcardsServiceCall(getPaymentModesModel)
+                .subscribe((res) => {
+                    this.loadingService.hide();
+
+                    if (res.isError === true) {
+                        this.loadingService.hide();
+                        this.toaster.error(res.errorMessage, "Error");
+                    } else if (!res.isError) {
+                        this.loadingService.hide();
+                        this.savedCards = res.payload;
+
+                        for (let [i, savedCard] of res.payload.entries()) {
+                            savedCard.ischecked = false;
+                            savedCard.CVV = null;
+                        }
+                    }
+                }, (error) => {
+                    this.loadingService.hide();
+                    this.toaster.error("API Error", 'Error');
+                });
+        }
+    }
+
+    /* insurance code start*/
+    allInsurInfo = new FlightInsuranceInputParams();
+    paxFormsGroup: FormGroup;
+    paxList: FormArray;
+    insuredPaxForms: FormGroup;
+    configerData: any;
+    insurActionPoolParams: any;
+
+    insuranceCard_onclick() {
+        this.allInsurInfo.insrCardExpanded = !this.allInsurInfo.insrCardExpanded;
+    }
+
+    insuranceYesNoSelected() {
+        if (this.allInsurInfo.ticketInsurd == "true") {
+            this.userAddedInsurance();
+        } else {
+            this.setInsurInitialInfo();
+        }
+    }
+
+    userAddedInsurance() {
+        if (this.allInsurInfo.APIsInitialised == false) {
+            //initialise only once ---
+            this.allInsurInfo.APIsInitialised = true;
+            let tempPickListData = JSON.parse(
+                sessionStorage.getItem("PickListResultData")
+            );
+            this.allInsurInfo.paxTitles = [];
+            this.allInsurInfo.relations = [];
+            this.allInsurInfo.IDNames = [
+                "PAN Card",
+                "Aadhar Card",
+                "Driving License",
+                "Voter Identity Card",
+            ];
+
+            for (let titl of tempPickListData) {
+                if (titl.pickListType == "Title_Type") {
+                    this.allInsurInfo.paxTitles.push(titl);
+                } else if (titl.pickListType == "Relationship_Type") {
+                    this.allInsurInfo.relations.push(titl);
+                }
+            }
+
+            this.countrieslistApiCall();
+            let passengers = [];
+            this.allInsurInfo.togglecount = this.createtripResponce.passengers.length;
+
+            for (let user of this.createtripResponce.passengers) {
+                let newPaxForm = this.formBuilder.group({
+                    nationality: [user.country, [Validators.required]],
+                    dob: [user.dateOfBirth, [Validators.required]],
+                    title: [user.title, [Validators.required]],
+                    nomineeName: ["", [Validators.required]],
+                    IDName: [""],
+                    IDNum: [""], //,  Validators.pattern("^[0-9]*$")
+                    nomineeRelation: ["", [Validators.required]],
+                    emailId: user.email,
+                    fullName: user.firstName + " " + user.lastName,
+                    isInsured: true,
+                    isExpanded: true,
+                    gender: user.gender,
+                    paxType: user.paxType
+                });
+                passengers.push(newPaxForm);
+            }
+
+            this.paxFormsGroup = this.formBuilder.group({
+                paxList: this.formBuilder.array(passengers),
+            });
+        }
+
+        this.allInsurInfo.selectedPolicyIndx = 0;
+        this.allInsurInfo.insrStep = 0;
+    }
+
+    setInsurInitialInfo() {
+        this.allInsurInfo.insrCardExpanded = true;
+        this.allInsurInfo.insrStep = -1;
+        this.allInsurInfo.ticketInsurd = "false";
+        this.allInsurInfo.dateSeperator = "depart";
+        // this.allInsurInfo.formatedStartDate = new Date();
+        // this.allInsurInfo.formatedEndDate = new Date();
+        if (this.travelType == "1") {
+            this.allInsurInfo.formatedStartDate = moment(JSON.parse(sessionStorage.getItem("upsellFromDate"))).format('ddd MMM DD YYYY');
+            this.allInsurInfo.formatedEndDate = moment(JSON.parse(sessionStorage.getItem("upsellFromDate"))).format('ddd MMM DD YYYY');
+
+        } else if (this.travelType == "2" || this.travelType == "3") {
+            this.allInsurInfo.formatedStartDate = moment(JSON.parse(sessionStorage.getItem("upsellFromDate"))).format('ddd MMM DD YYYY');
+            this.allInsurInfo.formatedEndDate = moment(JSON.parse(sessionStorage.getItem("upsellToDate"))).format('ddd MMM DD YYYY');
+
+        }
+        this.insuredPaxForms = this.formBuilder.group({
+            paxList: this.formBuilder.array([]),
+        });
+        this.allInsurInfo.togglecount = 0;
+        this.allInsurInfo.fromMinDobdate = moment(new Date()).format('YYYY-MM-DD');
+        this.allInsurInfo.fromAdtMaxdate = moment(new Date().getTime()).subtract(12, 'years').format('YYYY-MM-DD');
+        this.allInsurInfo.fromChdMaxdate = moment(new Date().getTime()).subtract(2, 'years').format('YYYY-MM-DD');
+    }
+
+    clickInsrNextStep() {
+        this.flightService.setStepperTitle(true);
+        if (this.allInsurInfo.insrStep >= 0) {
+            if (this.allInsurInfo.insrStep == 1) {
+                this.allInsurInfo.isPaxFormsSubmitted = true;
+                if (!this.paxFormsGroup.valid) {
+                    return;
+                }
+
+                var i = 0;
+                var temp = false;
+                for (let item of this.paxFormsGroup.get("paxList")["controls"]) {
+                    let expandStatus = this.getPaxatIndexForType(i, "isExpanded");
+                    const listControl = this.paxFormsGroup.get("paxList") as FormArray;
+                    const tempPaxForm = listControl.at(i);
+                    tempPaxForm.patchValue({
+                        isExpanded: true,
+                    });
+
+                    if (this.getPaxatIndex(i).isInsured.value == true) {
+                        temp = this.isInsurIDNumValid(this.getPaxatIndex(i).IDName.value, this.getPaxatIndex(i).IDNum.value);
+
+                        if (temp == false) {
+                            break;
+                        }
+                    }
+                    i = i + 1;
+                }//for loop end
+
+                if (temp == false) {
+                    return;
+                }
+            }
+
+            this.flightService.showInsurHead(true);
+            this.allInsurInfo.insrStep = this.allInsurInfo.insrStep + 1;
+        }
+
+        if (this.allInsurInfo.insrStep == 4) {
+            var insurdPassengrs = [];
+            var i = 0;
+            for (let item of (this.paxFormsGroup.controls.paxList as FormArray)
+                .controls) {
+                let tempPaxForm = (this.paxFormsGroup.controls.paxList as FormArray)
+                    .controls[i] as FormGroup;
+                if (tempPaxForm.controls.isInsured.value == true) {
+                    tempPaxForm.patchValue({
+                        isExpanded: false,
+                    });
+                    insurdPassengrs.push(tempPaxForm);
+                }
+                i = i + 1;
+            }
+
+            this.insuredPaxForms = this.formBuilder.group({
+                paxList: this.formBuilder.array(insurdPassengrs),
+            });
+
+            this.addInsurActionPoolParams();
+            this.flightService.showInsurHead(false);
+            this.flightService.enableInsurBackBtn(false);
+        }
+    }
+
+    clickInsrBackStep() {
+        if (this.allInsurInfo.insrStep >= 1) {
+            this.allInsurInfo.insrStep = this.allInsurInfo.insrStep - 1;
+        }
+
+        if (this.allInsurInfo.insrStep == 4) {
+            this.addInsurActionPoolParams();
+            this.flightService.showInsurHead(false);
+            this.flightService.enableInsurBackBtn(false);
+        }
+
+        if (this.allInsurInfo.insrStep == 0) {
+            this.flightService.showInsurHead(false);
+            this.flightService.enableInsurBackBtn(false);
+        }
+    }
+
+    addInsurActionPoolParams() {
+        //---test again
+        let passengersList = this.createtripResponce.passengers;
+        var i = 0;
+
+        for (let item of (this.paxFormsGroup.controls.paxList as FormArray)
+            .controls) {
+            let isPaxInsrd = this.getInsuredPaxatIndex(i).isInsured.value;
+            passengersList[i]["isInsured"] = isPaxInsrd;
+            passengersList[i]["dateOfBirth"] = this.getInsuredPaxatIndex(i).dob.value;
+            passengersList[i]["nomineeTitle"] = this.getInsuredPaxatIndex(
+                i
+            ).title.value;
+            passengersList[i]["nomineeName"] = this.getInsuredPaxatIndex(
+                i
+            ).nomineeName.value;
+            passengersList[i]["relationWithNominee"] = this.getInsuredPaxatIndex(
+                i
+            ).nomineeRelation.value;
+            passengersList[i]["idProof"] = this.getInsuredPaxatIndex(i).IDName.value;
+            passengersList[i]["idProofValue"] = this.getInsuredPaxatIndex(
+                i
+            ).IDNum.value;
+            i = i + 1;
+        }
+
+        if (
+            this.allInsurInfo.policyCacheKey &&
+            this.allInsurInfo.policiesList[this.allInsurInfo.selectedPolicyIndx]
+        ) {
+            let selectedPlan = this.allInsurInfo.policiesList[
+                this.allInsurInfo.selectedPolicyIndx
+            ];
+            let plankey = this.allInsurInfo.policiesList[
+                this.allInsurInfo.selectedPolicyIndx
+            ].planKey;
+            let insrDic = {
+                cacheKey: this.allInsurInfo.policyCacheKey,
+                planKey: plankey,
+            };
+
+            this.insurActionPoolParams = {
+                passengers: passengersList,
+                insurInfo: insrDic,
+            };
+
+            if (this.managemntCharges.insuranceAmount != 0) {
+                this.totalAmount = this.totalAmount - this.managemntCharges.insuranceAmount;
+            }
+            this.managemntCharges.insuranceAmount = selectedPlan?.premiumAmount;
+            this.totalAmount = this.totalAmount + this.managemntCharges.insuranceAmount;
+        }
+    }
+
+    async countrieslistApiCall() {
+        this.authenticationService.countriesList({}).subscribe((res) => {
+            if (res.isError === true) {
+            } else if (!res.isError && res.payload) {
+                this.allInsurInfo.countries = res.payload;
+                sessionStorage.setItem(
+                    "CountryListResultData",
+                    JSON.stringify(res.payload)
+                );
+            }
+        }, (error) => {
+            this.loadingService.hide();
+            this.toaster.error("API Error", 'Error');
+        });
+    }
+
+    insurToggle(event: any, index: any) {
+
+        this.allInsurInfo.togglecount = 0;
+        for (let item of (this.paxFormsGroup.controls.paxList as FormArray)
+            .controls) {
+            let isPaxInsrd = this.getPaxatIndex(index).isInsured.value;
+            if (isPaxInsrd == true) {
+                this.allInsurInfo.togglecount = this.allInsurInfo.togglecount + 1;
+            }
+        }
+
+        if (this.allInsurInfo.togglecount == 0) {
+            this.showInsurToggleAlert();
+        }
+    }
+
+    async showInsurToggleAlert() {
+        const alert = await this.alertController.create({
+            cssClass: "my-custom-class",
+            header: "Alert",
+            subHeader: "",
+            message: "Please select atleast one passenger to add insurance",
+            buttons: ["OK"],
+        });
+
+        await alert.present();
+    }
+
+    getPaxatIndexForType(i: any, type: any) {
+        let str: any;
+        let tempPaxForm = ((this.paxFormsGroup.controls.paxList as FormArray)
+            .controls[i] as FormGroup).controls;
+        switch (type) {
+            case "isInsured":
+                str = !tempPaxForm.isInsured.value;
+                break;
+            case "isExpanded":
+                str = tempPaxForm.isExpanded.value;
+                break;
+        }
+        return str;
+    }
+
+    getPaxatIndex(i: any) {
+        return ((this.paxFormsGroup.controls.paxList as FormArray).controls[
+            i
+        ] as FormGroup).controls;
+    }
+
+    getInsuredPaxatIndex(i: any) {
+        return ((this.insuredPaxForms.controls.paxList as FormArray).controls[
+            i
+        ] as FormGroup).controls;
+    }
+
+    onClickPaxInsurCard(index: any) {
+        const listControl = this.paxFormsGroup.get("paxList") as FormArray;
+        const tempPaxForm = listControl.at(index);
+        let expandStatus = this.getPaxatIndexForType(index, "isExpanded");
+        tempPaxForm.patchValue({
+            isExpanded: !expandStatus,
+        });
+    }
+
+    onClickSelectedPaxInsurCard(index: any) {
+        const listControl = this.insuredPaxForms.get("paxList") as FormArray;
+        const tempPaxForm = listControl.at(index);
+
+        let tempPaxForm11 = ((this.paxFormsGroup.controls.paxList as FormArray)
+            .controls[index] as FormGroup).controls;
+        let expandStatus = tempPaxForm11.isExpanded.value;
+        tempPaxForm.patchValue({
+            isExpanded: !expandStatus,
+        });
+    }
+
+    async openInsurProviders() {
+        let insrParams = JSON.parse(sessionStorage.getItem("userInfo"));
+        const searchItemModal = await this.modalController.create({
+            component: CustomListComponent,
+            componentProps: {
+                obj: <customComponentProps>{
+                    requestBody: <FlightInsuranceSuppliersList>{
+                        product_Id: 7,
+                        legal_Entity_Id: insrParams.legalEntityId,
+                        legal_Entity_Guid: insrParams.legalEntityGuId,
+                        action: "",
+                    },
+                    placeholder: "Select Provider",
+                    endpoint: "v1/settings/legal-entity-supplier/list",
+                },
+            },
+            keyboardClose: false,
+        });
+
+        searchItemModal.onDidDismiss().then((callback) => {
+            this.allInsurInfo.selectedInsrProvidr = callback.data.header;
+        });
+        return await searchItemModal.present();
+    }
+
+    async openDobCalendar(paxIndex: any) {
+        let selectedDate = this.getPaxatIndex(paxIndex).dob.value;
+        let noHeader = true;
+
+        let options = {
+            title: "Select Date",
+            defaultDate: selectedDate
+                ? new Date(
+                    selectedDate.string ? selectedDate.string : selectedDate.time
+                )
+                : new Date(),
+            doneLabel: "Apply",
+            weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+        };
+
+        const myCalendar = await this.modalController.create({
+            component: CustomDatePickerComponent,
+            componentProps: {
+                options,
+                noHeader: true,
+            },
+        });
+
+        myCalendar.present();
+
+        const event: any = await myCalendar.onDidDismiss();
+        const { data: date, role } = event;
+        const listControl = this.paxFormsGroup.get("paxList") as FormArray;
+        const tempPaxForm = listControl.at(paxIndex);
+        tempPaxForm.patchValue({
+            dob: date.dateObj,
+        });
+    }
+
+    async openCalendar(type: any) {
+        this.allInsurInfo.dateSeperator = type;
+        var fromDate = new Date();
+
+        if (type == 'return') {
+            fromDate = this.allInsurInfo.insrStartDate
+                ? new Date(
+                    this.allInsurInfo.insrStartDate.string
+                        ? this.allInsurInfo.insrStartDate.string
+                        : this.allInsurInfo.insrStartDate.time
+                )
+                : new Date();
+        }
+
+        var options: CalendarModalOptions = {
+            title: "Select Date",
+            defaultDate: this.allInsurInfo.insrStartDate
+                ? new Date(
+                    this.allInsurInfo.insrStartDate.string
+                        ? this.allInsurInfo.insrStartDate.string
+                        : this.allInsurInfo.insrStartDate.time
+                )
+                : new Date(),
+            canBackwardsSelected: false,
+            doneLabel: "Apply",
+            from: fromDate,
+            weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+            pickMode:
+                this.allInsurInfo.dateSeperator == "return" ? "range" : "single",
+        };
+
+        const myCalendar = await this.modalController.create({
+            component: CustomDatePickerComponent,
+            componentProps: {
+                options,
+                noHeader: false,
+            },
+        });
+
+        myCalendar.present();
+
+        const event: any = await myCalendar.onDidDismiss();
+        const { data: date, role } = event;
+
+        if (date) {
+            if (date.from && date.to) {
+                this.allInsurInfo.dateSeperator = "return";
+            }
+            if (date.from) {
+                this.allInsurInfo.dateSeperator = "return";
+            } else if (date.to) {
+                this.allInsurInfo.dateSeperator = "depart";
+            }
+
+            if (this.allInsurInfo.dateSeperator == "depart") {
+                this.allInsurInfo.insrStartDate = date;
+                this.allInsurInfo.formatedStartDate = date.string;
+                this.allInsurInfo.insrEndDate = date;
+                this.allInsurInfo.formatedEndDate = date.string;
+            } else if (this.allInsurInfo.dateSeperator == "return") {
+                this.allInsurInfo.insrStartDate = date.from;
+                this.allInsurInfo.insrEndDate = date.to;
+                this.allInsurInfo.formatedStartDate = date.from.string;
+                this.allInsurInfo.formatedEndDate = date.to.string;
+            }
+            this.allInsurInfo.dateSeperator = "";
+        }
+    }
+
+    viewPolicies() {
+        this.makeUpsellParentReq();
+    }
+
+    makeUpsellParentReq() {
+        let insurModel = new FlightInsuraceUpsellParentSearchReq();
+        insurModel.flightRequestId = String(
+            this.createtripResponce?.flightRequestDetails?.flightRequestId
+        );
+        insurModel.flightRequestGuid =
+            this.createtripResponce?.flightRequestDetails?.flightRequestGuid;
+
+        insurModel.action = "UPSELL";
+        insurModel.supplierCodes = this.allInsurInfo?.selectedInsrProvidr;
+
+        if (this.platformType == 1) {
+            insurModel.travelStartDate = this.datepipe.transform(
+                this.form.value.formatedStartDate,
+                "yyyy-MM-dd"
+            );
+            insurModel.travelEndDate = this.datepipe.transform(
+                this.form.value.formatedEndDate,
+                "yyyy-MM-dd"
+            );
+        } else {
+            insurModel.travelStartDate = this.datepipe.transform(
+                this.allInsurInfo.formatedStartDate,
+                "yyyy-MM-dd"
+            );
+            insurModel.travelEndDate = this.datepipe.transform(
+                this.allInsurInfo.formatedEndDate,
+                "yyyy-MM-dd"
+            );
+        }
+
+        let tempUsersList = [];
+        var i = 0;
+        for (let item of this.paxFormsGroup.get("paxList")["controls"]) {
+            let tempPaxForm = this.getPaxatIndex(i);
+            if (tempPaxForm.isInsured.value == true) {
+                let userInfo = new FlightUserInsuranceModel();
+                userInfo.dob = tempPaxForm.dob.value;
+                userInfo.userId = "";
+                userInfo.passengerId = "";
+                userInfo.emailId = tempPaxForm.emailId.value;
+                userInfo.name = tempPaxForm.fullName.value;
+                tempUsersList.push(userInfo);
+            }
+            i = i + 1;
+        }
+
+        insurModel.userDetails = tempUsersList;
+        this.loadingService.show();
+        this.insurService.upsellParentSearch(insurModel).subscribe((res) => {
+            if (res.errorCode == 0) {
+                this.getUpsellSearchResults(res.payload);
+            } else {
+                this.loadingService.hide();
+                this.toaster.error(res.errorMessage, "Error");
+            }
+        }, (error) => {
+            this.loadingService.hide();
+            this.toaster.error("API Error", 'Error');
+        });
+    }
+
+    getUpsellSearchResults(cacheKey: any) {
+        let searchModel = new FlightInsuraceUpsellSearchResult();
+        searchModel.actionType = 1;
+        searchModel.pageIndex = 1;
+        searchModel.cacheKey = cacheKey;
+        searchModel.pageSize = 50;
+        searchModel.sortType = "asc";
+        searchModel.sortKey = "Coverage";
+        searchModel.isAnnualPlan = false;
+        searchModel.actionType = 1;
+        searchModel.filterFlag = false;
+        searchModel.coverage = null;
+        searchModel.premium = null;
+        searchModel.suppliers = [];
+        searchModel.insuranceFeatures = [];
+
+        this.insurService.upsellSearchResuls(searchModel).subscribe((res) => {
+            if (res.errorCode == 13) {
+                this.apiTimer = setTimeout(() => {
+                    this.getUpsellSearchResults(cacheKey);
+                }, 2000);
+            } else if (res.errorCode == 0 && res.payload) {
+                this.loadingService.hide();
+                this.allInsurInfo.policyCacheKey = res.payload?.cacheKey;
+                this.allInsurInfo.insrStep = 3;
+                this.allInsurInfo.policiesList = res.payload?.plans;
+            } else {
+                this.loadingService.hide();
+                this.toaster.error(res.errorMessage, "Error");
+            }
+        }, (error) => {
+            this.loadingService.hide();
+            this.toaster.error("API Error", 'Error');
+        });
+    }
+
+    onSelectPolicy(index: any) {
+        this.allInsurInfo.selectedPolicyIndx = index;
+    }
+
+    viewInsrBenefits() {
+        this.flightService.showInsurHead(true);
+        this.flightService.enableInsurBackBtn(true);
+        this.allInsurInfo.insrStep = 5;
+    }
+
+    changePolicy() {
+        this.flightService.showInsurHead(true);
+        this.flightService.enableInsurBackBtn(true);
+
+        this.allInsurInfo.insrStep = 3;
+        this.insuredPaxForms = this.formBuilder.group({
+            paxList: this.formBuilder.array([]),
+        });
+    }
+
+    async openPopOver(ev: any, index: any) {
+        let usersList = this.allInsurInfo.policiesList[index].premiumSplit;
+        const popover = await this.popoverController.create({
+            component: CustomPopOverComponent,
+            componentProps: {
+                optionsObj: usersList,
+                currentType: <popOverTypes>{
+                    placeholder: 'insurPolicies',
+                }
+            },
+            cssClass: "custom-popover",
+            event: ev,
+            translucent: true,
+        });
+        popover.onDidDismiss().then((result) => {
+        });
+        await popover.present();
+    }
+
+    isViewPolicieDisabled() {
+        if (
+            this.allInsurInfo.formatedEndDate &&
+            this.allInsurInfo.formatedStartDate &&
+            this.allInsurInfo.selectedInsrProvidr &&
+            this.allInsurInfo.formatedStartDate != "" &&
+            this.allInsurInfo.formatedEndDate != "" &&
+            this.allInsurInfo.selectedInsrProvidr != ""
+        ) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+    checkIfInsuranceAdded() {
+        var hasInsr = false;
+
+        if (
+            this.insurActionPoolParams?.passengers &&
+            this.insurActionPoolParams?.insurInfo
+        ) {
+            hasInsr = true;
+        }
+        return hasInsr;
+    }
+
+    isInsurIDNumValid(IDType: any, IdValue: any) {
+        var isValid = false;
+
+        switch (IDType) {
+            case 'PAN Card':
+                var letterNumber = /^[0-9a-zA-Z]+$/;
+                if (IdValue.match(letterNumber) && IdValue.length == 10) {
+                    isValid = true;
+                }
+                break;
+            case 'Aadhar Card':
+                var letterNumber = /^[0-9]+$/;
+                if (IdValue.match(letterNumber) && IdValue.length == 12) {
+                    isValid = true;
+                }
+                break;
+            case 'Driving License':
+                var letterNumber = /^[0-9a-zA-Z]+$/;
+                if (IdValue.match(letterNumber)) {
+                    isValid = true;
+                }
+                break;
+            case 'Voter Identity Card':
+                var letterNumber = /^[0-9a-zA-Z]+$/;
+                if (IdValue.match(letterNumber)) {
+                    isValid = true;
+                }
+                break;
+            default:
+                isValid = true;
+                break;
+        }
+        return isValid;
+    }
+
+    getInsurIDNumError(IDType: any) {
+        var msg = "";
+        switch (IDType) {
+            case 'PAN Card':
+                msg = "Enter 10 digit alphaNumeric values";
+                break;
+            case 'Aadhar Card':
+                msg = "Enter 12 digit numbers";
+                break;
+            case 'Driving License':
+                msg = "Enter only alphaNumeric values";
+            case 'Voter Identity Card':
+                msg = "Enter only alphaNumeric values";
+            default:
+                msg = "";
+                break;
+        }
+
+        return msg;
+    }
+
+    getMaxDate(from, type) {
+        if (from == 'ADT' && type == 'max') {
+            return this.allInsurInfo.fromAdtMaxdate;
+        } else if (from == 'CHD' && type == 'max') {
+            return this.allInsurInfo.fromChdMaxdate;
+        } else if (from == 'CHD' && type == 'min') {
+            return this.allInsurInfo.fromAdtMaxdate;
+        } else if (from == 'INF' && type == 'min') {
+            return this.allInsurInfo.fromChdMaxdate;
+        } else if (from == 'INF' && type == 'max') {
+            return this.allInsurInfo.fromMinDobdate;
+        }
+    }
+
+    getInsurDobEvent(ev, paxIndex: any) {
+        let DOBStr = moment(ev.detail.value).format("YYYY-MM-DD");
+        const listControl = this.paxFormsGroup.get("paxList") as FormArray;
+        const tempPaxForm = listControl.at(paxIndex);
+        tempPaxForm.patchValue({
+            dob: DOBStr,
+        });
+    }
+
+    async insuranceInfoDownloads(url: any) {
+        let errorStatus = this.commonService.downloadPdfUrl(url);
+        if (await errorStatus != 0) {
+            this.toaster.error("PDF is not found", 'Error');
+        }
+    }
+
+    async showInsurDownldOptions() {
+
+        const alert = await this.alertController.create({
+            header: 'Select Any One',
+            inputs: [
+                {
+                    name: 'value1',
+                    type: 'radio',
+                    label: 'Policy Wording',
+                    value: 'Policy'
+                },
+                {
+                    name: 'value1',
+                    type: 'radio',
+                    label: 'Brochure',
+                    value: 'Brochure'
+                },
+            ],
+            buttons: [
+                { text: 'Cancel' },
+                {
+                    text: 'Download',
+                    handler: async (data) => {
+                        if (data == "Policy") {
+
+                            this.insuranceInfoDownloads(this.allInsurInfo?.policiesList[this.allInsurInfo.selectedPolicyIndx].policyWordingURL);
+                        } else {
+                            this.insuranceInfoDownloads(this.allInsurInfo?.policiesList[this.allInsurInfo.selectedPolicyIndx].broucherURL);
+                        }
+                    }
+                },
+            ]
+        });
+        await alert.present();
+    }
+    /* insurance code end*/
+
+    leadToggleChange(event: any) {
+        this.actionPoolflightObj[0].etsApplicable = event.detail.checked;
+        this.totalAmount = this.totalAmount - this.totalserviceCharges;
+        this.setmMangementFee(this.actionPoolflightObj[0]);
+        this.totalAmount = this.totalAmount + this.totalserviceCharges;
+    }
+
+    replaceGst(gst: any) {
+        if (gst) {
+            this.selectedGst = gst.detail.value;
+            this.filterGstList.filter(res => {
+                if (this.selectedGst == `${res.gstNumber}:${res.companyName}`) {
+                    this.selectedGst = res;
+                    this.gstDetails = new GSTInfo(this.selectedGst);
+                    this.createtripResponce.gstdetails = new GSTInfo(this.selectedGst);
+                }
+            })
+            //  this.selectedGst=value;
+
+
+            this.actionPoolflightObj = null;
+            this.fareCheckCall()
+        }
+    }
+
+    /*config settings*/
+    setManagementFeeFlags() {
+        //this.showPassenPref = true;
+        this.configParams.allowSSRBooking = true;
+        /*
+                this.isTradeDiscount=true;
+                this.isManagementFees=true;
+                this.allowSSRBooking=true;
+                this.isEtsApplicable=true;
+                */
+    }
+
+    ngOnDestroy() {
+        this.maxTime = undefined;
+        this.compLive = false;
+        this.meal_alert = false;
+        clearTimeout(this.apiTimer);
+    }
+
+    ionViewWillLeave() {
+        clearTimeout(this.timer);
+        clearInterval(this.apiTimer);
+    }
+
+    // ngOnDestroy() {
+    //     this.timer = null;
+    //     this.loadingService.hide();
+    //     //this.actionPoolflightObj = undefined
+    //     this.compLive = false;
+    // }
+
+    // ionViewWillLeave() {
+    //     this.loadingService.hide();
+    //     clearInterval(this.timer);
+    //     clearTimeout(this.timer);
+    // }
+
+    convertFullDate(date: any) {
+        return this.commonService.convertFullDate(date);
+    }
+
+    customDateFormat(date: any, format: any) {
+        return this.commonService.customDateFormat(date, format);
+    }
+    getBalance() {
+        // const userData = JSON.parse(sessionStorage.getItem("userInfo"));
+        // this.userInfo = userData;
+        let req = { "legal_Entity_Id": this.createtripResponce.legalEntityId, "legal_Entity_Guid": this.createtripResponce.legalEntityGuid, };
+
+        this.getConfigure.getCreditLimit(
+            req).subscribe(res => {
+                if (res['errorCode'] == 0 && !res['isError']) {
+                    this.creditBalance = res['payload'];
+                    if (this.creditBalance) this.balNotAvail = false;
+                }
+            })
+    }
+
+    async acceptTermsOfService(e: any) {
+        if (e.target.checked) {
+            this.termsServiceChecked = true;
+            // this.bookdisabled = false;
+        }
+        else {
+            this.termsServiceChecked = false;
+            // this.bookdisabled = true;
+        }
+        // console.log(this.termsServiceChecked)
+        // console.log(this.bookdisabled)
+        // console.log(this.showpaymentoptions)
+    }
+
+    onClicked(event: any) {
+        //  console.log(event)
+        //  console.log(event.res.cardTypeId);
+        //     console.log(event.res.cardIssuingBrand);
+        if (event.event == "radioGroupChange") {
+            this.selectedcard = "";
+            this.savedCards.length = 0;
+            // this.actionPoolCall(true, true);
+
+            for (let [i, paymentoption] of this.paymentoptions.entries()) {
+                if (paymentoption?.paymentModeName == event.res.detail.value) {
+                    paymentoption.ischecked = true;
+                    this.radioValue = event.res.detail.value;
+                    this.selectedpaymentoption = paymentoption;
+                    this.paymentModeId = this.selectedpaymentoption?.paymentModeId;
+                    this.cardId = null;
+                    this.cardGuid = null;
+                    this.sourceType = null;
+                    this.paymentGateId = null;
+
+
+
+                    if (this.paymentModeId == 3 || this.paymentModeId == 4) {
+                        this.showPaymentmsg = true;
+
+                        // this.getsavedcards(paymentoption?.paymentModeId);
+                        this.bookdisabled = true;
+                    }
+                    else if (this.paymentModeId == 6 || this.paymentModeId == 8) {
+                        this.bookdisabled = true;
+                    }
+                    else {
+                        if (this.fromManageBookSSR) {
+                            this.ssractionPoolCall(true);
+                        } else {
+                            this.loadingService.show()
+                            setTimeout(() => {
+                                this.actionPoolCall(true, true);
+                            }, 1000);
+                        }
+                        this.showPaymentmsg = false;
+                    }
+                } else {
+                    paymentoption.ischecked = false;
+                }
+            }
+        }
+        else if (event.event == "newcarddetails") {
+            // console.log(event.res?.isError)
+            this.selected_tab = event.res.selectedTab;
+            // console.log(this.selected_tab)
+            this.sourceType = event.res.sourceType;
+            this.paymentGateId = event.res.paymentGateId;
+            this.Payment_Gateway_Type = event.res.Payment_Gateway_Type;
+
+            // console.log(event.res.newcard_checkbox_status);
+            //  console.log(this.selected_tab);
+
+            // console.log(event.res.sourceType)
+            //          
+            // event.res.bankName;
+            // event.res.bankid;
+            // event.res.expiryMonth;
+            // event.res.expiryYear;
+            // event.res.nameonCard;
+            // event.res.registeraddressline1;
+            // event.res.registeraddressline2;
+            // event.res.country_Id;
+            // event.res.country_Name;
+            // event.res.state_Id;
+            // event.res.state_Name;
+            // event.res.city_Id;
+            // event.res.city_Name;
+            // event.res.postalCode;
+            // event.res.cardTypeId;
+            // event.res.cardIssuingBrand;
+            if (event.res?.isactionpool == true) {
+                this.newcardobj = {
+                    "addressLine1": event.res.registeraddressline1 ? event.res.registeraddressline1 : null,
+                    "addressLine2": event.res.registeraddressline2 ? event.res.registeraddressline2 : null,
+                    "bankId": event.res.bankid,
+                    "bankName": event.res.bankName,
+                    "cardIssuingBrand": event.res.cardIssuingBrand,
+                    "cardNumber": this.commonService.encryptData((event.res.cardNumber?.replace(/\s/g, ''))?.toString()),
+                    "cardTypeId": event.res.cardTypeId,
+                    "cityName": event.res.city_Name ? event.res.city_Name : null,
+                    "cityId": event.res.city_Id ? event.res.city_Id : null,
+                    "country": event.res.country_Name ? event.res.country_Name : null,
+                    "countryId": event.res.country_Id ? event.res.country_Id : null,
+                    "expiryMonth": event.res.expiryMonth,
+                    "cardType": event.res.cardIssuingBrand,
+                    "expiryYear": event.res.expiryYear,
+                    "isSavedCards": this.paymentModeId == 7 ? null : (event.res.newcard_checkbox_status ? event.res.newcard_checkbox_status : false),
+                    "nameOnCard": event.res.nameonCard,
+                    "postalCode": event.res.postalCode ? event.res.postalCode : null,
+                    "stateName": event.res.state_Name ? event.res.state_Name : null,
+                    "stateId": event.res.state_Id ? event.res.state_Id : null,
+                    "sourceType": event.res.sourceType_id,
+                }
+                this.actionPoolCall();
+            }
+            if (event.res?.cardLimit == event.res?.cardNumber?.length && event.res?.isError == false
+                && (event.res?.bankName != null && event.res?.bankName != '' && event.res?.bankName != undefined)
+                && (event.res?.expiryMonth != null && event.res?.expiryMonth != '' && event.res?.expiryMonth != undefined)
+                && (event.res?.expiryYear != null && event.res?.expiryYear != '' && event.res?.expiryYear != undefined)
+                && (event.res?.nameonCard != null && event.res?.nameonCard != '' && event.res?.nameonCard != undefined)
+                && (event.res.cvv_Pin?.length >= 3 && event.res?.cvv_Pin != null && event.res?.cvv_Pin != '' && event.res?.cvv_Pin != undefined)
+            ) {
+
+                this.cvv_card = event.res.cvv_Pin
+                this.newcardobj = {
+                    "addressLine1": event.res.registeraddressline1 ? event.res.registeraddressline1 : null,
+                    "addressLine2": event.res.registeraddressline2 ? event.res.registeraddressline2 : null,
+                    "bankId": event.res.bankid,
+                    "bankName": event.res.bankName,
+                    "cardIssuingBrand": event.res.cardIssuingBrand,
+                    "cardNumber": this.commonService.encryptData((event.res.cardNumber?.replace(/\s/g, ''))?.toString()),
+                    "cardTypeId": event.res.cardTypeId,
+                    "cityName": event.res.city_Name ? event.res.city_Name : null,
+                    "cityId": event.res.city_Id ? event.res.city_Id : null,
+                    "country": event.res.country_Name ? event.res.country_Name : null,
+                    "countryId": event.res.country_Id ? event.res.country_Id : null,
+                    "expiryMonth": event.res.expiryMonth,
+                    "cardType": event.res.cardIssuingBrand,
+                    "expiryYear": event.res.expiryYear,
+                    "isSavedCards": this.paymentModeId == 7 ? null : (event.res.newcard_checkbox_status ? event.res.newcard_checkbox_status : false),
+                    "nameOnCard": event.res.nameonCard,
+                    "postalCode": event.res.postalCode ? event.res.postalCode : null,
+                    "stateName": event.res.state_Name ? event.res.state_Name : null,
+                    "stateId": event.res.state_Id ? event.res.state_Id : null,
+                    "sourceType": event.res.sourceType_id,
+                }
+                this.bookdisabled = false;
+            }
+            else {
+                this.bookdisabled = true;
+            }
+            if (event.res?.newcard_checkbox_status) {
+                if (event.res?.cardLimit == event.res?.cardNumber?.length && event.res?.isError == false
+                    && (event.res?.bankName != null && event.res?.bankName != '' && event.res?.bankName != undefined)
+                    && (event.res?.expiryMonth != null && event.res?.expiryMonth != '' && event.res?.expiryMonth != undefined)
+                    && (event.res?.expiryYear != null && event.res?.expiryYear != '' && event.res?.expiryYear != undefined)
+                    && (event.res?.nameonCard != null && event.res?.nameonCard != '' && event.res?.nameonCard != undefined)
+                    && (event.res.cvv_Pin?.length >= 3 && event.res?.cvv_Pin != null && event.res?.cvv_Pin != '' && event.res?.cvv_Pin != undefined)
+                    && (event.res?.registeraddressline1 != null && event.res?.registeraddressline1 != '' && event.res?.registeraddressline1 != undefined)
+                    && (event.res?.registeraddressline2 != null && event.res?.registeraddressline2 != '' && event.res?.registeraddressline2 != undefined)
+                    && (event.res?.country_Name != null && event.res?.country_Name != '' && event.res?.country_Name != undefined)
+                    && (event.res?.state_Name != null && event.res?.state_Name != '' && event.res?.state_Name != undefined)
+                    && (event.res?.city_Name != null && event.res?.city_Name != '' && event.res?.city_Name != undefined)
+                    && (event.res?.postalCode != null && event.res?.postalCode != '' && event.res?.postalCode != undefined)
+                ) {
+
+                    this.cvv_card = event.res.cvv_Pin
+                    this.newcardobj = {
+                        "addressLine1": event.res.registeraddressline1 ? event.res.registeraddressline1 : null,
+                        "addressLine2": event.res.registeraddressline2 ? event.res.registeraddressline2 : null,
+                        "bankId": event.res.bankid,
+                        "bankName": event.res.bankName,
+                        "cardIssuingBrand": event.res.cardIssuingBrand,
+                        "cardNumber": this.commonService.encryptData((event.res.cardNumber?.replace(/\s/g, ''))?.toString()),
+                        "cardTypeId": event.res.cardTypeId,
+                        "cityName": event.res.city_Name ? event.res.city_Name : null,
+                        "cityId": event.res.city_Id ? event.res.city_Id : null,
+                        "country": event.res.country_Name ? event.res.country_Name : null,
+                        "countryId": event.res.country_Id ? event.res.country_Id : null,
+                        "expiryMonth": event.res.expiryMonth,
+                        "cardType": event.res.cardIssuingBrand,
+                        "expiryYear": event.res.expiryYear,
+                        "isSavedCards": event.res.newcard_checkbox_status ? event.res.newcard_checkbox_status : false,
+                        "nameOnCard": event.res.nameonCard,
+                        "postalCode": event.res.postalCode ? event.res.postalCode : null,
+                        "stateName": event.res.state_Name ? event.res.state_Name : null,
+                        "stateId": event.res.state_Id ? event.res.state_Id : null,
+                        "sourceType": event.res.sourceType_id,
+                    }
+                    this.bookdisabled = false;
+                }
+                else {
+                    this.bookdisabled = true;
+                }
+
+            }
+
+
+        }
+        // if (event == "actionPoolCallTrue") {
+        //     this.actionPoolCall(true);
+        // } else if (event == "ssractionPoolCallTrue") {
+        //     this.ssractionPoolCall(true);
+        // } else if (event == "bookdisabledTrue") {
+        //     this.bookdisabled = true;
+        // } else if (event == "bookdisabledFalse") {
+        //     this.bookdisabled = false;
+        // } else if (event == "ssractionPoolCall") {
+        //     this.ssractionPoolCall();
+        // } else if (event == "actionPoolCall") {
+        //     this.actionPoolCall();
+        // } else 
+        if (event.event == "savedCards") {
+            this.savedCards = event.res;
+            // console.log(this.savedCards)
+        } else if (event.event == "cvvchange") {
+            this.cvv_card = event.res.detail.value;
+            // console.log(this.savedcard_cvv)
+
+            // console.log(event.res.detail.value);
+            if (event.res.detail.value.length > 3) {
+                event.res.detail.value = event.res.detail.value.slice(0, 3);
+                this.savedcard_cvv = event.res.detail.value;
+            }
+
+            for (let [i, savedCard] of this.savedCards.entries()) {
+                if (savedCard?.creditCardId == event.res1?.creditCardId) {
+                    savedCard.CVV = event.res.detail.value;
+                    if (event.res.detail.value.length == 3) {
+                        this.bookdisabled = false;
+                    } else {
+                        this.bookdisabled = true;
+                    }
+                } else {
+                    savedCard.CVV = null;
+                }
+            }
+        } else if (event.event == "cardradioGroupChange") {
+            // console.log(event.res)
+            if (event.res.srcElement.localName == "ion-input") {
+                return;
+            }
+            for (let [i, savedCard] of this.savedCards.entries()) {
+                if (savedCard?.creditCardId == event.res.detail.value) {
+                    savedCard.ischecked = true;
+                    // console.log(savedCard.ischecked)
+                    savedCard.CVV = "";
+                    this.selectedcard = savedCard;
+                    this.cardradioValue = event.res.detail.value;
+                    this.cardId = savedCard?.creditCardId;
+                    this.cardGuid = savedCard?.creditCardIdGuid;
+                    this.paymentGateId = savedCard?.paymentGatewayId;
+                    this.sourceType = savedCard?.sourceType;
+
+                    if (
+                        savedCard?.paymentGatewayType &&
+                        savedCard?.paymentGatewayType != ""
+                    ) {
+                        this.bookdisabled = true;
+                    } else {
+                        this.bookdisabled = false;
+                    }
+
+                    if (this.fromManageBookSSR) {
+                        this.ssractionPoolCall();
+                    } else {
+                        this.actionPoolCall();
+                    }
+                } else {
+                    savedCard.ischecked = false;
+                    // console.log(savedCard.ischecked)
+                }
+            }
+        }
+    }
+    async advTaxWithFlightPoolKeys(flightPoolKeys: any) {
+        // console.log(flightPoolKeys);
+        // if(this.advTotalPrice !=0 && flightPoolKeys){
+        //   flightPoolKeys.forEach(flightKey=>{
+        //     let flight=this.advTaxTravellerLi.find(el=>el.flightKey==flightKey.flightKey && el.fareOptionKey==flightKey.fareOptionKey);
+        //     if(flight !=undefined){
+        //     flightKey['advancePricing']={};
+        //     flightKey['advancePricing']['adult']=flight.advance.adultTax;
+        //     flightKey['advancePricing']['child']=flight.advance.childTax;
+        //     flightKey['advancePricing']['infant']=flight.advance.infantTax;
+        //    }
+        //   })
+        // }
+    };
+    default_meal_popup() {
+        this.default_meal =
+        {
+            "addOnSsr": "false",
+            "description": null,
+            "fare": "0",
+            "flightIndex": "0",
+            "isDefaultMealSelected": "true",
+            "isLCC": "true",
+            "segmentIndex": "1",
+            "ssrCode": "ML__FR",
+            "ssrIndex": "0",
+            "tripIndex": "1",
+            "tripIndicator": "1"
+        };
+    }
+    // defaultmealSelection(){
+    //     let self=this; self.isMealAdded=false; let isMealLCount=0
+    //   _.forEach(this.passengerDetails,function(psnr){
+    //     _.forEach(psnr.meal,function(meal){
+    //       if(meal.isLCC){
+    //         isMealLCount=1;
+    //         if(meal.isDefaultMealSelected){
+    //           self.isMealAdded=true;
+    //           return;
+    //         }
+    //       }
+    //      })
+    //    })
+    //    if(isMealLCount!=0 && self.isMealAdded==false) return true;
+    // //    this.modalReferenceNext = this.modalService.open(this.DefualtMealSelectedModal,{backdrop:'static',keyboard:false});
+    //   }
+    async defaultmeal_alert() {
+        const alert = await this.alertController.create({
+            cssClass: "",
+            // header: 'Confirm!',
+            message: 'No Meal is added to this booking',
+            backdropDismiss: true,
+            buttons: [
+                {
+                    text: "Cancel",
+                    role: "cancel",
+                    cssClass: "secondary",
+                    handler: (blah) => {
+                        this.meal_alert = false;
+                        this.alertController.dismiss();
+
+
+                    },
+                },
+                {
+                    text: "Ok",
+                    handler: () => {
+                        this.meal_alert = true;
+                        this.alertController.dismiss();
+                        this.naviagateTo();
+
+
+                    },
+                },
+            ],
+        });
+        await alert.present();
+    }
+
+    Skip() {
+        this.ShowAddons = !this.ShowAddons
+        this.flightService.setStepperTitle(true);
+    }
+    // unableTaasTMC()
+    // {
+    //     this.unableisTaasTMC= !this.unableisTaasTMC;
+    // }
+    splitTime(time) {
+        var p;
+        if (time.includes(" ")) p = time.split(" ")[1];
+        else p = time;
+        return p;
+    }
+    conversiondate(date) {
+        return moment(date).format("DD MMM")
+
+    }
+
+    displayname() {
+        this.createtripResponce?.passengers?.forEach((element, i) => {
+            if (element.seat) {
+                element.seat.forEach(selectedseat => {
+                    if (selectedseat.seatDesignator != null || selectedseat.seatDesignator != null) {
+                        this.userselectedseats += selectedseat.seatDesignator + (i == this.createtripResponce.passengers.length - 1 ? '' : ',');
+                    }
+
+                });
+            }
+            if (element.meal) {
+                element.meal.forEach(selectedmeal => {
+                    if (selectedmeal.description != null || selectedmeal.description != null) {
+                        this.userselectedmeal += selectedmeal.description + (i == this.createtripResponce.passengers.length - 1 ? '' : ',');
+                    }
+
+                });
+            }
+
+
+        });
+
+    }
+
+
+    async billingentityactionPoolCall() {
+        let obj
+        obj = {
+
+            flightPoolKeys: this.fareCheckflightRequestKeys,
+            legalEntityGuid: this.createtripResponce.legalEntityGuid,
+            legalEntityId: this.createtripResponce.legalEntityId,
+            gst: this.createtripResponce.gstdetails,
+            cacheKey: this.cacheKey,
+            isPnrRetrieval: this.createtripResponce.isPnrRetrieval,
+            actionType: "BOOKING",
+            flightRequestId: String(this.createtripResponce.flightRequestId),
+            amendmentId: this.createtripResponce.amendmentId
+
+        }
+
+        this.actionPoolAPI.fareCheckActionPoolServiceCall(obj).subscribe(async res => {
+            if (res.isError === true) {
+
+                if (res.errorCode == 13) {
+
+                    this.setTime = setTimeout(() => {
+                        this.billingentityactionPoolCall();
+                    }, 3000)
+
+                } else {
+                    await this.loadingService.hide();
+                    if (this.fromManageBookSSR) {
+                        this.routerbyurl.navigateByUrl("flights/stepper/bookingsuccess", {
+                            state: { fromManageBookSSR: this.fromManageBookSSR },
+                        });
+                    } else {
+                        this.routerbyurl.navigateByUrl("flights/stepper/bookingsuccess", {
+                            state: { fromManageBook: this.fromManageBook },
+                        });
+                    }
+                }
+            }
+            else {
+                await this.loadingService.hide();
+                if (this.fromManageBookSSR) {
+                    this.routerbyurl.navigateByUrl("flights/stepper/bookingsuccess", {
+                        state: { fromManageBookSSR: this.fromManageBookSSR },
+                    });
+                } else {
+                    this.routerbyurl.navigateByUrl("flights/stepper/bookingsuccess", {
+                        state: { fromManageBook: this.fromManageBook },
+                    });
+                }
+            }
+
+        }, (error) => {
+            this.loadingService.hide();
+            this.toaster.error("API Error", 'Error');
+        });
+    }
+}
